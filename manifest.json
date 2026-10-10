@@ -1,0 +1,7 @@
+{
+    "name": "ceaikaemotes",
+    "version_number": "0.2.1",
+    "website_url": "https://github.com/Ceaika/ceaikaemotes",
+    "description": "experimental lol. 16 emotes, a custom wheel and proximity music for Ion, synced through a relay.",
+    "dependencies": []
+}

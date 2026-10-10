@@ -1,0 +1,17 @@
+build/
+dist/
+.venv/
+__pycache__/
+*.pyc
+*.dll
+*.exe
+*.pdb
+*.lib
+*.zip
+*.log
+.env
+room.key
+*.secret
+relay-data/
+private/
+local-config.json

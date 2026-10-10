@@ -1,0 +1,22 @@
+services:
+  relay:
+    image: python:3.12-slim
+    user: "${RELAY_UID:?set RELAY_UID}:${RELAY_GID:?set RELAY_GID}"
+    network_mode: host
+    working_dir: /app
+    command: ["python", "-B", "-u", "relay.py", "--bind", "127.0.0.1", "--key-file", "/run/secrets/room.key"]
+    volumes:
+      - ./relay.py:/app/relay.py:ro
+      - ./room.key:/run/secrets/room.key:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.50
+    pids_limit: 64
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

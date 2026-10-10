@@ -1,0 +1,144 @@
+{
+    "Name": "ceaikaemotes",
+    "Version": "0.2.1",
+    "LoadPriority": 30,
+    "RequiredOnClient": false,
+    "Description": "experimental lol",
+    "Scripts": [
+        {
+            "Path": "sh_ceaikaemotes_catalog.nut",
+            "RunOn": "UI || (CLIENT && MP)"
+        },
+        {
+            "Path": "cl_ceaikaemotes_models.nut",
+            "RunOn": "CLIENT && MP"
+        },
+        {
+            "Path": "cl_ceaikaemotes.nut",
+            "RunOn": "CLIENT && MP",
+            "ClientCallback": {
+                "Before": "CeaikaEmotes_Init"
+            }
+        },
+        {
+            "Path": "cl_ceaikaemotes_wheel.nut",
+            "RunOn": "CLIENT && MP",
+            "ClientCallback": {
+                "After": "CeaikaEmotes_WheelInit"
+            }
+        },
+        {
+            "Path": "ui_ceaikaemotes_wheel.nut",
+            "RunOn": "UI",
+            "UICallback": {
+                "Before": "CeaikaEmotes_AddMenu",
+                "After": "CeaikaEmotes_Settings"
+            }
+        }
+    ],
+    "ConVars": [
+        {
+            "Name": "em_url",
+            "DefaultValue": "https://vps-11515c72.vps.ovh.net/emotes"
+        },
+        {
+            "Name": "emkey",
+            "DefaultValue": "428ae7e425fd94a2443ba642611722bf4d1de2a3be17c21d"
+        },
+        {
+            "Name": "em_enabled",
+            "DefaultValue": "1"
+        },
+        {
+            "Name": "em_music",
+            "DefaultValue": "1"
+        },
+        {
+            "Name": "em_volume",
+            "DefaultValue": "0.45"
+        },
+        {
+            "Name": "em_audio_ready",
+            "DefaultValue": "0000"
+        },
+        {
+            "Name": "em_audio_idle",
+            "DefaultValue": "0000"
+        },
+        {
+            "Name": "em_audio_device",
+            "DefaultValue": "0000"
+        },
+        {
+            "Name": "em_audio_voices",
+            "DefaultValue": "0000"
+        },
+        {
+            "Name": "em_audio_request",
+            "DefaultValue": ""
+        },
+        {
+            "Name": "em_native_ready",
+            "DefaultValue": "0000"
+        },
+        {
+            "Name": "em_native_hidden",
+            "DefaultValue": "0000"
+        },
+        {
+            "Name": "em_native_request",
+            "DefaultValue": ""
+        },
+        {
+            "Name": "em_camera_request",
+            "DefaultValue": "0"
+        },
+        {
+            "Name": "em_wheel_key",
+            "DefaultValue": "1",
+            "Flags": "ARCHIVE_PLAYERPROFILE"
+        },
+        {
+            "Name": "em_wheel_pad",
+            "DefaultValue": "0",
+            "Flags": "ARCHIVE_PLAYERPROFILE"
+        },
+        {
+            "Name": "em_traversal",
+            "DefaultValue": "1",
+            "Flags": "ARCHIVE_PLAYERPROFILE"
+        }
+    ],
+    "ConCommands": [
+        {
+            "Name": "em_play",
+            "Function": "CeaikaEmotes_Play",
+            "Context": "CLIENT"
+        },
+        {
+            "Name": "em_stop",
+            "Function": "CeaikaEmotes_Stop",
+            "Context": "CLIENT"
+        },
+        {
+            "Name": "em_status",
+            "Function": "CeaikaEmotes_Status",
+            "Context": "CLIENT"
+        },
+        {
+            "Name": "em_probe",
+            "Function": "CeaikaEmotes_Probe",
+            "Context": "CLIENT"
+        },
+        {
+            "Name": "em_wheel",
+            "Function": "CeaikaEmotes_OpenCommand",
+            "Context": "CLIENT"
+        },
+        {
+            "Name": "em_list",
+            "Function": "CeaikaEmotes_List",
+            "Context": "CLIENT"
+        }
+    ]
+}

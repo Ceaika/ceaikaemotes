@@ -1,0 +1,11 @@
+# merge with the existing compose file, dont replace its proxy.
+services:
+  relay:
+    mem_limit: 128m
+    cpus: 0.50
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
