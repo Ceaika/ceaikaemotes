@@ -9,6 +9,8 @@ import struct
 import wave
 import zipfile
 
+from emote_models import validate_models
+
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
 VERSION = json.loads((ROOT / "manifest.json").read_text())["version_number"]
@@ -25,6 +27,7 @@ def release_files(folder):
 
 
 def validate():
+    validate_models(ROOT)
     manifest = json.loads((ROOT / "manifest.json").read_text())
     mod = json.loads((ROOT / "client/mods/ceaikaemotes/mod.json").read_text())
     assert mod["Version"] == VERSION

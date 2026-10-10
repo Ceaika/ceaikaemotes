@@ -64,7 +64,11 @@ to keep the overhead down, idle music closes its audio device and the DLL polls 
 
 ## limitations
 
-some animations can look stepped even at high FPS, music doesn't get muffled by walls, and the dancing model doesn't change the server's hitbox. the DLL also depends on a supported engine build. another mod replacing the same pilot or titan models can conflict with it.
+some animations can look stepped even at high FPS, music doesn't get muffled by walls, and the dancing model doesn't change the server's hitbox. the DLL also depends on a supported engine build.
+
+Northstar_Archive's Cat Ears mods for male/female Grapple and Pulse pilots are detected automatically, with cat ears kept on the dancing copy. emote models use private paths, so normal pilot models are left to cosmetic mods. other custom pilot meshes use the standard dancing appearance. replace the entire old ceaikaemotes folder when updating to remove its old pilot overrides.
+
+The upstream Pulse Male 1.0.0 zip puts `mod.json` inside `Locked_Folder`. Move it to `mods/pulse_cat_ears_male`, alongside `vpk`, so Ion can load the Cat Ears mod.
 
 ## more info
 

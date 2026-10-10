@@ -63,6 +63,7 @@ string function CeaikaEmotes_PlayerUID(entity player)
 
 void function CeaikaEmotes_Init()
 {
+    CeaikaEmotes_ModelsInit()
     AddDestroyCallback("player", void function(entity player)
     {
         if(player in relay.playerUIDs) delete relay.playerUIDs[player]

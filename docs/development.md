@@ -35,6 +35,15 @@ the build script compiles the DLL and runs the native tests. the package script 
 
 the source archive includes the supplied runtime assets so it can build the same client. importing a brand new animation still needs the original porting pipeline and source assets; that isn't recreated from a compiled MDL by these tools. when changing assets intentionally, update `assets/checksums.sha256` after checking the changes.
 
+`tools/emote_models.py` prepares an extracted v53 pilot MDL for dancing under a private path, preserving its geometry, materials, bones and existing animation includes. for example:
+
+```sh
+python tools/emote_models.py /path/to/extracted/cat_ears_f.mdl client/mods/ceaikaemotes/mod/models/ceaikaemotes/pilots/cat_ears_f.mdl --name ceaikaemotes/pilots/cat_ears_f.mdl
+python -m unittest discover -s tools -p 'test_models.py' -v
+```
+
+Cat Ears source package versions, download URLs and hashes are recorded in `assets/cat_ears_sources.json`. extract the MDL from the listed VPK with a Titanfall VPK reader. the Pulse VPKs contain a pack log before the MDL; the model must be extracted as its own file. package validation rejects normal pilot overrides, missing private copies, wrong internal names and missing emote libraries.
+
 ## things worth testing
 
 native tests cover hiding/restoring entities, reused handles, attached weapons, the crouch/jump restore path, camera state, stale heartbeats and the memory cache. audio tests cover timing, panning, 44.1/48 kHz inputs and actual Windows audio-device idle/close/reopen behaviour. the relay tests cover all catalog IDs, expiry, playback continuity, verified identity, rejected UID overrides, code replay, token expiry, request validation, room bounds and rate limits.
@@ -44,6 +53,8 @@ these aren't a replacement for launching the game. use an isolated profile and t
 the actual checks and their limits for this build are in [verification.md](verification.md).
 
 for an in-game check, try every wheel entry, stationary and traversal emotes, jump/attack cancellation, stopping while physically holding crouch, turning through 0/360 degrees, and looking away from another player then back. check another client sees the normal model return. test near/far and left/right music, then stop everything and check `em_status` goes idle with zero voices.
+
+for Cat Ears compatibility, enable each of the four Northstar_Archive packages in turn and check its male/female Grapple or Pulse pilot before, during and after every emote. repeat with Cat Ears disabled and with all four enabled. after changing enabled mods, reload the map so model selection and precaching run again. ensure an update removed the old `mod/models/humans/pilots` overrides.
 
 one local client can catch compilation and local playback bugs. two clients are still needed to verify what a friend sees over the real relay. don't call a single-client test proof of every multiplayer edge case.
 

@@ -4,6 +4,8 @@ the MIT license covers Ceaika's original code and documentation. it does **not**
 
 Titanfall 2 pilot and titan models and game-specific content belong to their respective rights holders, including Respawn Entertainment and Electronic Arts. this is an unofficial mod, not an EA/Respawn release.
 
+the Cat Ears dancing meshes come from Northstar_Archive's [Cat Ears Grapple Pilot Female](https://thunderstore.io/c/northstar/p/Northstar_Archive/Cat_Ears_Grapple_Pilot_Female/) and [Cat Ears Grapple Pilot Male](https://thunderstore.io/c/northstar/p/Northstar_Archive/Cat_Ears_Grapple_Pilot_Male/) packages, version 1.0.0. the Pulse female 1.0.1 and Pulse male 1.0.0 packages contain the same respective meshes. these copies retain the supplied geometry and materials, with private model names and emote animation includes added. source URLs and hashes are in `assets/cat_ears_sources.json`. Northstar_Archive is the package uploader; the supplied package metadata doesn't establish original authorship or grant an MIT license for these assets.
+
 the emote catalog includes billy bounce, dance moves, electro shuffle, electro swing, floss, freestylin', griddy, hype, orange justice, laugh, rambunctious, reanimated, smooth moves, squat kick, take the L and worm.
 
 these include emotes associated with Fortnite/Epic Games and music that can have separate rights holders. the local asset exports do not establish complete upstream authorship or redistribution permissions for each track. don't read their inclusion as a claim that Ceaika wrote the songs or owns the original dances. credits alone aren't a redistribution license.

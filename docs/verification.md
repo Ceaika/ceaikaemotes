@@ -2,7 +2,7 @@
 
 ## current limits
 
-both players need a supported Windows Ion client, matching ceaikaemotes files and the same relay room. people without the mod see the normal player. the game server keeps control of movement and hitboxes.
+both players need a supported Windows Ion client, matching ceaikaemotes files and the same relay room. people without the mod see the normal player. the game server keeps control of movement and hitboxes. Cat Ears pilot mods use matching dancing copies; other custom pilot meshes use standard dancing copies.
 
 the DLL depends on a checked engine layout. Linux/Wine and arbitrary future builds aren't verified. other mods replacing the same pilot or titan models can conflict. some dances look stepped even at high FPS, and titan poses can have clipping or foot sliding. music fades with distance but isn't muffled by walls.
 
@@ -12,7 +12,9 @@ relay timing isn't frame-perfect. identity verification doesn't prove match memb
 
 native tests cover visibility restoration, reused handles, attachments, camera state, stale requests and idle processing. audio tests cover phase, panning, supported sample rates and closing/reopening the Windows device. authentication checks cover consent gating, URL restrictions, callback errors and clearing sessions.
 
-relay tests cover catalog/traversal restrictions, replay and expiry, rejection of UID overrides, malformed requests, capacity and request limits. packaging checks validate versions, icon dimensions, catalog/audio mappings, model hashes, archive paths and ZIP integrity.
+relay tests cover catalog/traversal restrictions, replay and expiry, rejection of UID overrides, malformed requests, capacity and request limits. packaging checks validate versions, icon dimensions, catalog/audio mappings, model hashes, archive paths and ZIP integrity. model checks cover private asset paths, internal model names, animation includes and preservation of model data when preparing copies.
+
+The Cat Ears assets were compared with the four published Grapple and Pulse packages, and asset checks cover all 16 emote includes. This compatibility update has not been checked in-game.
 
 all 208 titan/emote combinations loaded in an isolated Ion client on a local Northstar server with `sv_cheats 0`. after correcting atlas mechanical bones and prime grounding, the affected seven rigs passed another 112 playback checks. stopping returned hidden entities and animated copies to zero. northstar orange justice and the corrected atlas hands/cockpit were also visually reviewed.
 

@@ -13,6 +13,14 @@
 
 **relay hosts:** update the backend before publishing the client. 0.3.0 requires verified sessions, and older clients can't sync with the new backend. see [hosting](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/hosting.md).
 
+## unreleased
+
+- moved dancing models to private paths to avoid replacing cosmetic pilot models.
+- automatically select Cat Ears dancing copies for Northstar_Archive's male/female Grapple and Pulse mods, retaining their ears during emotes.
+- added model asset checks and a reproducible tool for preparing private dancing copies.
+- updating requires replacing the old mod folder to remove its pilot model overrides.
+
+
 ## 0.2.1
 
 - 16 emotes available through a two-page wheel and console commands.

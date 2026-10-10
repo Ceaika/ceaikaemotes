@@ -1,0 +1,54 @@
+[
+  {
+    "model": "client/mods/ceaikaemotes/mod/models/ceaikaemotes/pilots/cat_ears_f.mdl",
+    "source_mdl_sha256": "59fa9c87f9228597701236d7054fa22e2f86604206587e8fd04c8017ca386b9c",
+    "packages": [
+      {
+        "package": "Cat_Ears_Grapple_Pilot_Female",
+        "version": "1.0.0",
+        "url": "https://thunderstore.io/package/download/Northstar_Archive/Cat_Ears_Grapple_Pilot_Female/1.0.0/",
+        "archive_sha256": "dfa55b4c40a8c8eca49510d737f57231c79651602fa802fa9f4844715268ee1c",
+        "vpk": "mods/grapple_cat_ears_female/vpk/client_mp_common.bsp.pak000_000.vpk",
+        "archive_offset": 0,
+        "mod_json": "mods/grapple_cat_ears_female/mod.json",
+        "mod_name": "CAT.EARS.Tech.Test.Pulse.Blade.Female.Grapple.Replace"
+      },
+      {
+        "package": "Cat_Ears_Pulse_Pilot_Female",
+        "version": "1.0.1",
+        "url": "https://thunderstore.io/package/download/Northstar_Archive/Cat_Ears_Pulse_Pilot_Female/1.0.1/",
+        "archive_sha256": "275cbdfccc2b4274f344cb78a60cd2bb3e1e9ef53b70d67ddf948fb0b8274a82",
+        "vpk": "mods/pulse_cat_ears_female/vpk/client_mp_common.bsp.pak000_000.vpk",
+        "archive_offset": 223,
+        "mod_json": "mods/pulse_cat_ears_female/mod.json",
+        "mod_name": "CAT.EARS.Tech.Test.Pulse.Blade.Female"
+      }
+    ]
+  },
+  {
+    "model": "client/mods/ceaikaemotes/mod/models/ceaikaemotes/pilots/cat_ears_m.mdl",
+    "source_mdl_sha256": "92e82d045cd765260e99f216c07061d42684fd75cd4ad1180bdd909f921d9c58",
+    "packages": [
+      {
+        "package": "Cat_Ears_Grapple_Pilot_Male",
+        "version": "1.0.0",
+        "url": "https://thunderstore.io/package/download/Northstar_Archive/Cat_Ears_Grapple_Pilot_Male/1.0.0/",
+        "archive_sha256": "511c2da73ea1d1301c16872bcfb89b9dfd4f9328ae219df3402811c90fe07bc7",
+        "vpk": "mods/grapple_cat_ears_male/vpk/client_mp_common.bsp.pak000_000.vpk",
+        "archive_offset": 0,
+        "mod_json": "mods/grapple_cat_ears_male/mod.json",
+        "mod_name": "CAT.EARS.Tech.Test.Pulse.Blade.Male.Grapple.Replace"
+      },
+      {
+        "package": "Cat_Ears_Pulse_Pilot_Male",
+        "version": "1.0.0",
+        "url": "https://thunderstore.io/package/download/Northstar_Archive/Cat_Ears_Pulse_Pilot_Male/1.0.0/",
+        "archive_sha256": "cc81bbeb99976786c3a5d5cb9e4de86081223248938b5f5528af827b663a1570",
+        "vpk": "mods/pulse_cat_ears_male/vpk/client_mp_common.bsp.pak000_000.vpk",
+        "archive_offset": 223,
+        "mod_json": "mods/pulse_cat_ears_male/Locked_Folder/mod.json",
+        "mod_name": "CAT.EARS.Tech.Test.Pulse.Blade.Male"
+      }
+    ]
+  }
+]
