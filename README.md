@@ -69,6 +69,10 @@ these pages explain the setup, the engine limitations behind the design, and wha
 - [fixing common issues](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/troubleshooting.md)
 - [what the room key does and doesn't protect](https://github.com/Ceaika/ceaikaemotes/blob/main/SECURITY.md)
 
+## was ai used
+
+i've used codex to get rid of the time consuming parts, such as taking the already built emotes and wheel from my partypack mod i was making, and putting them inside the standalone version; i've also used it to build the mixer.
+
 ## credits and code
 
 mod and integration by Ceaika. the animation pipeline uses FortnitePorting, UEFormat, SFM's studiomdl and mdlshit, with RePak for the wheel assets. [tools and credits](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/asset-tools.md) explains what each one does. development and debugging were AI assisted with OpenAI Codex. original code is MIT licensed, copyright Ceaika. the imported game models, animations and music are separate assets; the MIT license doesn't make those ours. see [third party notes](https://github.com/Ceaika/ceaikaemotes/blob/main/THIRD_PARTY_NOTICES.md).
