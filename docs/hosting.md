@@ -4,6 +4,11 @@ the client comes configured for the public relay, so normal players don't need t
 
 ## updating a legacy relay install
 
+**0.3.0 changes the protocol.** older clients send a UID with the shared key; the new backend rejects that. update the relay and distribute matching clients together. the client zip does not deploy the server. until your public endpoint runs 0.3.0, the new client cannot authenticate there.
+
+sessions live in memory, so a relay restart asks clients to authenticate again. their saved permission allows this automatically. the relay needs outbound HTTPS to Respawn's Stryder service. an outage fails verification instead of allowing unverified identities.
+
+
 the upgrade helper supports the legacy `emote-relay-prototype` Compose project. it expects an existing `compose.yaml`, `relay.py`, `room.key` and working service configuration. for a new install, use the setup below.
 
 unpack the relay update outside the running installation, then run this from the new `relay` folder, using the path to your existing installation:
@@ -12,7 +17,7 @@ unpack the relay update outside the running installation, then run this from the
 bash update-existing.sh "$HOME/emote-relay-prototype"
 ```
 
-it runs the tests, backs up the current Python file, copies the new relay, adds resource limits and recreates only the relay container. it keeps the existing room key, Compose file, Caddyfile and admin routes. it checks that the local health endpoint reports 0.2.0 and attempts to restore the old relay if that fails. it doesn't rotate the shared key or enable trusted proxy headers automatically.
+it runs the tests, backs up the current relay and identity module, copies both new modules, adds resource limits and recreates only the relay container. it keeps the existing room key, Compose file, Caddyfile and admin routes. it checks that the local health endpoint reports 0.3.0 and attempts to restore the old relay if that fails. it doesn't rotate the shared key or enable trusted proxy headers automatically.
 
 the existing service must already have working key permissions and a `.env` matching its non-root container user. the key stays read-only inside the container. don't fix a permission error by making every file world-writable.
 
@@ -49,4 +54,4 @@ without that option, local proxied requests share a fallback bucket. the global 
 
 ## room keys and admin
 
-giving someone the emote key doesn't give them admin credentials. the emote process has no admin routes or shell execution feature. but someone with the shared key can pretend to be another emote UID; see [SECURITY.md](../SECURITY.md). keep the admin login separate, and don't include its configs in a client release.
+giving someone the emote key doesn't give them admin credentials. the emote process has no admin routes or shell execution feature. the room key only allows `/auth` attempts. `/sync` requires a verified account session and derives its UID from that session. see [SECURITY.md](../SECURITY.md). keep the admin login separate, and don't include its configs in a client release.

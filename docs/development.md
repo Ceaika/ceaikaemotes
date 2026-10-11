@@ -6,6 +6,8 @@
 | --- | --- |
 | `client/mods/ceaikaemotes` | mod metadata, Squirrel, wheel UI, models and paks |
 | `native/emote_visibility.cpp` | rendering, camera, lifetime checks and plugin callbacks |
+| `native/emote_auth.h` | fresh Origin code and HTTPS session exchange |
+| `relay/identity.py` | EA verification and expiring UID-bound sessions |
 | `native/emote_audio.h` | local WAV loading and mixer |
 | `native/emote_catalog.h` | fixed track filenames and sample rates |
 | `assets/catalog.json` | emote IDs, sequences, timing and track mapping |
@@ -35,7 +37,7 @@ the source archive includes the supplied runtime assets so it can build the same
 
 ## things worth testing
 
-native tests cover hiding/restoring entities, reused handles, attached weapons, the crouch/jump restore path, camera state, stale heartbeats and the memory cache. audio tests cover timing, panning, 44.1/48 kHz inputs and actual Windows audio-device idle/close/reopen behaviour. the relay tests cover all catalog IDs, expiry, playback continuity, auth, request validation, room bounds and rate limits.
+native tests cover hiding/restoring entities, reused handles, attached weapons, the crouch/jump restore path, camera state, stale heartbeats and the memory cache. audio tests cover timing, panning, 44.1/48 kHz inputs and actual Windows audio-device idle/close/reopen behaviour. the relay tests cover all catalog IDs, expiry, playback continuity, verified identity, rejected UID overrides, code replay, token expiry, request validation, room bounds and rate limits.
 
 these aren't a replacement for launching the game. use an isolated profile and the game's real Squirrel compiler to check script changes. keep preview commands and private-room keys out of the release. the default shared public-room key is intentionally included in mod.json.
 
@@ -45,12 +47,16 @@ for an in-game check, try every wheel entry, stationary and traversal emotes, ju
 
 one local client can catch compilation and local playback bugs. two clients are still needed to verify what a friend sees over the real relay. don't call a single-client test proof of every multiplayer edge case.
 
+the compiled Titan libraries are included, so rebuilding the DLL and packages does not need Blender or the original animation exports. `assets/titans.json` lists the models and `assets/titan-validation.json` records the decoded animation checks. [titans.md](titans.md) explains the retargeting work; the local porting workspace is not bundled as a portable toolchain.
+
 ## publishing
 
-the client zip has root `manifest.json`, `README.md`, `CHANGELOG.md` and a 256x256 PNG icon, plus `mods` and `plugins`. the package icon is `icon.png` in the repository root.
+the client and Thunderstore zips have root `manifest.json`, `README.md`, `CHANGELOG.md` and a 256x256 PNG icon, plus `mods` and `plugins`. the package icon is `icon.png` in the repository root.
 
-the Thunderstore team is chosen at upload time. the package uses `ceaikaemotes`, version `0.2.1`, and the GitHub URL `https://github.com/Ceaika/ceaikaemotes`. it deliberately doesn't declare a stock Northstar package dependency that might replace someone's Ion setup. the README explains the Ion requirement.
+the Thunderstore team is chosen at upload time. the package uses `ceaikaemotes`, version `0.3.0`, and the GitHub URL `https://github.com/Ceaika/ceaikaemotes`. it deliberately doesn't declare a stock Northstar package dependency that might replace someone's Ion setup. the README explains the Ion requirement.
 
 review the third party asset notes before publishing. the public shared-room key is intentionally bundled. never upload private-room keys, the test profile, raw player logs, personal autoexec or production Caddyfile. the source archive is a file snapshot; it doesn't include Git history or private credentials.
 
 official format references: [Northstar publishing](https://docs.northstar.tf/Modding/guides/publishing/), [plugin locations](https://docs.northstar.tf/Modding/plugins/), [package installation](https://docs.northstar.tf/Wiki/using-northstar/packages/), and [Thunderstore package format](https://wiki.thunderstore.io/mods/creating-a-package).
+
+0.3.0 changes authentication. deploy and check the matching relay before publishing a client that points at it. keep the in-game consent prompt, and verify both first approval and a relaunch with remembered approval. never archive session tokens.

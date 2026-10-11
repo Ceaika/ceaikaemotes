@@ -180,6 +180,8 @@ static void SetDiagnosticValue(const char *name, int value)
     if (capacity > length && IsMemoryReadable(text, length + 1))
         memcpy(text, formatted, length + 1);
 }
+#include "emote_auth.h"
+
 static void *FindEntity(int index)
 {
     return entityList ? GetVirtualFunction<void *(*)(void *, int)>(entityList, 3)(entityList, index)
@@ -417,6 +419,7 @@ struct Plugin final : PluginCallbacks
             EmoteAudio::ClearRequests();
             return;
         }
+        EmoteAuth::Tick();
         const char *audio = ReadConVarString(FindConVar("em_audio_request"));
         if (audio && *audio)
             nextIdlePollTime = 0;
@@ -445,7 +448,8 @@ struct Plugin final : PluginCallbacks
             return;
         }
         const char *camera = ReadConVarString(FindConVar("em_camera_request"));
-        SetEmoteCamera(camera && strcmp(camera, "1") == 0);
+        emoteCamera.distance = camera && strcmp(camera, "2") == 0 ? 520.0f : 180.0f;
+        SetEmoteCamera(camera && (strcmp(camera, "1") == 0 || strcmp(camera, "2") == 0));
         int wanted[128]{};
         int count = 0;
         if (!ParseRenderRequest(raw, n, wanted, count))

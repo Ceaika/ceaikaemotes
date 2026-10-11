@@ -1,27 +1,23 @@
 # compatibility and test coverage
 
-## current limitations
+## current limits
 
-- both players need ceaikaemotes, a supported Windows Ion client and access to the same relay room. unmodded players don't see the animated copies.
-- the DLL depends on a particular engine layout. its build check rejects unsupported layouts; Linux/Wine compatibility hasn't been verified.
-- emotes are visual copies. the game server still uses the original player's movement, animation state and hitbox.
-- relay timing isn't frame-perfect, and the shared public key doesn't verify player identity. see [SECURITY.md](../SECURITY.md).
-- some imported animations can look stepped. proximity audio fades with distance but doesn't account for walls.
-- the supplied relay supports up to 32 active room entries. the audio mixer supports 16 simultaneous voices. large public groups may need a different relay capacity or room design.
-- other mods replacing the same pilot models can conflict with the animation libraries.
+both players need a supported Windows Ion client, matching ceaikaemotes files and the same relay room. people without the mod see the normal player. the game server keeps control of movement and hitboxes.
 
-## automated checks
+the DLL depends on a checked engine layout. Linux/Wine and arbitrary future builds aren't verified. other mods replacing the same pilot or titan models can conflict. some dances look stepped even at high FPS, and titan poses can have clipping or foot sliding. music fades with distance but isn't muffled by walls.
 
-the native tests cover model restoration, reused entity handles, attachments, camera state, stale heartbeats and the per-frame memory cache. audio checks cover playback timing, panning, sample rates and Windows audio-device sleep/reopen behaviour.
+relay timing isn't frame-perfect. identity verification doesn't prove match membership or that someone is honest about their own emote. the supplied relay has 32 room entries and the mixer has 16 voices. see [security](../SECURITY.md).
 
-the 12 relay tests cover catalog entries, traversal restrictions, authentication, expiry, timing continuity, malformed requests, room capacity and request limits. packaging checks validate catalog/audio mappings, asset hashes, icon size, versions and ZIP integrity.
+## checked before packaging
 
-## in-game coverage
+native tests cover visibility restoration, reused handles, attachments, camera state, stale requests and idle processing. audio tests cover phase, panning, supported sample rates and closing/reopening the Windows device. authentication checks cover consent gating, URL restrictions, callback errors and clearing sessions.
 
-the release was checked with an isolated Ion client on a local Northstar server using `sv_cheats 0`. all 16 emotes produced an animated copy and an active music voice without client script errors. wheel selection, including orange justice, was checked in-game, along with a griddy traversal request.
+relay tests cover catalog/traversal restrictions, replay and expiry, rejection of UID overrides, malformed requests, capacity and request limits. packaging checks validate versions, icon dimensions, catalog/audio mappings, model hashes, archive paths and ZIP integrity.
 
-after stopping, the client returned to zero animated copies, hidden entities and audio voices, with the audio device closed. the bundled public-room key was also checked against the hosted relay.
+all 208 titan/emote combinations loaded in an isolated Ion client on a local Northstar server with `sv_cheats 0`. after correcting atlas mechanical bones and prime grounding, the affected seven rigs passed another 112 playback checks. stopping returned hidden entities and animated copies to zero. northstar orange justice and the corrected atlas hands/cockpit were also visually reviewed.
 
-this release check used one game client. it doesn't cover every multiplayer timing issue, hardware setup or server combination, and it isn't a performance benchmark. the deployment script has passed Bash syntax checks, but the Docker/Caddy deployment hasn't been exercised as part of this release check.
+real titan melee input was checked with orange justice and traversal griddy. both stopped and restored the model, music, forced crouch and camera without script errors.
 
-for contributor commands and an in-game checklist, see [development.md](development.md). for installation problems, see [troubleshooting.md](troubleshooting.md).
+a real EA-code exchange passed against the HTTPS preview relay. the single-client checks rejected a forged sync UID, invalid session, public key used as a session and fake EA code. a separate native probe requested a fresh code for the real account but submitted it with a different dummy UID; that was rejected with HTTP 401. these checks don't require another player and don't expose raw credentials.
+
+the in-game relay prompt was accepted and wheel playback confirmed without console commands. remembered permission also authenticated automatically on a subsequent isolated-client launch. mouse-wheel page switching and removal of the bottom help text were checked in-game too.

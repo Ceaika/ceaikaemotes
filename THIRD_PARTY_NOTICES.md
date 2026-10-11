@@ -1,8 +1,8 @@
 # credits and asset notes
 
-the MIT license covers Ceaika's original code and documentation. it does **not** grant a new license for imported animations, music, pilot models or other third party game content.
+the MIT license covers Ceaika's original code and documentation. it does **not** grant a new license for imported animations, music, pilot/titan models or other third party game content.
 
-Titanfall 2 pilot models and game-specific content belong to their respective rights holders, including Respawn Entertainment and Electronic Arts. this is an unofficial mod, not an EA/Respawn release.
+Titanfall 2 pilot and titan models and game-specific content belong to their respective rights holders, including Respawn Entertainment and Electronic Arts. this is an unofficial mod, not an EA/Respawn release.
 
 the emote catalog includes billy bounce, dance moves, electro shuffle, electro swing, floss, freestylin', griddy, hype, orange justice, laugh, rambunctious, reanimated, smooth moves, squat kick, take the L and worm.
 
@@ -10,7 +10,7 @@ these include emotes associated with Fortnite/Epic Games and music that can have
 
 complete track-by-track attribution and permission records are not included in this repository. redistribution of these assets requires checking their original sources and terms. `assets/catalog.json` records the exact files and sequences used, and `assets/checksums.sha256` identifies the supplied binaries. the code can be reviewed and shared separately from these assets.
 
-the wheel integration and emote ports are by Ceaika. asset conversion uses FortnitePorting and UEFormat (h4lfheart and contributors), Source Filmmaker's studiomdl (Valve), and mdlshit (headassbtw, MasterLiberty and contributors). RePak (r-ex and contributors) packages the wheel assets. Blender is used for previews, and Crowbar's v53 layout is a format reference.
+the wheel integration and emote ports are by Ceaika. asset conversion uses FortnitePorting and UEFormat (h4lfheart and contributors), Source Filmmaker's studiomdl (Valve), and mdlshit (headassbtw, MasterLiberty and contributors). RePak (r-ex and contributors) packages the wheel assets. Blender and Rokoko were used for the initial titan alignment; Python/NumPy handled the batch retargeting. Blender is also used for previews, and Crowbar's v53 layout is a format reference.
 
 see [asset tools and credits](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/asset-tools.md) for project links, each tool's role, and the difference between required conversion steps and optional tools. development and debugging were AI assisted with OpenAI Codex. no external compiler tools or game executables are included in the client package.
 

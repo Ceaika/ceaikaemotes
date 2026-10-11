@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 import struct
 import wave
 import zipfile
@@ -33,6 +34,17 @@ def validate():
     convars = {item["Name"]: item["DefaultValue"] for item in mod["ConVars"]}
     assert re.fullmatch(r"[a-zA-Z0-9_-]{24,128}", convars["emkey"])
     assert convars["em_enabled"] == "1"
+    assert convars["em_auth_allowed_url"] == "", "Never ship someone else's approval"
+    assert "auth-preview" not in convars["em_url"]
+    assert not any(
+        "auth_test" in item["Name"] or "binding_test" in item["Name"]
+        for item in mod["ConCommands"]
+    )
+    archived = {
+        item["Name"] for item in mod["ConVars"] if "ARCHIVE" in item.get("Flags", "")
+    }
+    assert "em_auth_allowed_url" in archived
+    assert not {"em_auth_session", "em_auth_request"} & archived
 
     catalog = json.loads((ROOT / "assets/catalog.json").read_text())
     assert len(catalog) == 16
@@ -70,6 +82,19 @@ def validate():
     for line in (ROOT / "assets/checksums.sha256").read_text().splitlines():
         expected, relative = line.split("  ", 1)
         assert digest(ROOT / relative) == expected, f"Asset changed: {relative}"
+
+    titans = json.loads((ROOT / "assets/titans.json").read_text())
+    validation = json.loads((ROOT / "assets/titan-validation.json").read_text())[
+        "models"
+    ]
+    assert len(titans) == len(validation) == 13
+    for titan in titans:
+        report = next(item for item in validation if item["id"] == titan["id"])
+        assert report["clips"] == 16
+        model_root = ROOT / "client/mods/ceaikaemotes/mod"
+        assert digest(model_root / titan["path"]) == report["model_sha256"]
+        library = model_root / "models/emotes/titans" / (titan["id"] + ".mdl")
+        assert digest(library) == report["animation_sha256"]
 
     icon = (ROOT / "icon.png").read_bytes()
     assert icon[:8] == b"\x89PNG\r\n\x1a\n"
@@ -130,6 +155,12 @@ def main():
         for path in sorted((ROOT / "assets/music").glob("*.wav"))
     )
     archive(f"ceaikaemotes-{VERSION}-client.zip", client)
+    # same layout works for manual installs and Thunderstore.
+    thunderstore = DIST / f"ceaikaemotes-{VERSION}-thunderstore.zip"
+    shutil.copyfile(DIST / f"ceaikaemotes-{VERSION}-client.zip", thunderstore)
+    thunderstore.with_suffix(".zip.sha256").write_text(
+        f"{digest(thunderstore)}  {thunderstore.name}\n", encoding="ascii"
+    )
 
     source = [
         (ROOT / name, "ceaikaemotes/" + name)

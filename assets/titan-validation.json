@@ -1,0 +1,121 @@
+{
+  "models": [
+    {
+      "id": "ion",
+      "clips": 16,
+      "bones": 179,
+      "model_sha256": "c9614a4077402ce6766847a10360f9a2e9e794f646736445212d77f1ad26a506",
+      "animation_sha256": "d6aa38af4790e8c4e6897022269fa3c7ddcab7db7bae53809805301ac828a3a4",
+      "max_position_error_inches": 0.06457856522867833,
+      "max_angle_error_degrees": 0.2062897919910753
+    },
+    {
+      "id": "tone",
+      "clips": 16,
+      "bones": 190,
+      "model_sha256": "fbcee4b150ecd53b0f78a1622ef410b8b1ba20143da35d2f6f51dbbf1346b8fc",
+      "animation_sha256": "1ac368926d1b83fd4659c445fc2027e1ab6786cc1b29315f8cfe4f0e9489b1ad",
+      "max_position_error_inches": 0.06274147479501888,
+      "max_angle_error_degrees": 0.2062897919910753
+    },
+    {
+      "id": "monarch",
+      "clips": 16,
+      "bones": 191,
+      "model_sha256": "7ba7f943f88b24dc95686800c6dc62afa20bb5c622b00f8d78d8d1f1c6e01aa0",
+      "animation_sha256": "7390278e90ea8c18c1c33f65cdf8b3b7f92399e9b5379150498ad7a0a9a09106",
+      "max_position_error_inches": 0.06362523671458038,
+      "max_angle_error_degrees": 0.2062897919910753
+    },
+    {
+      "id": "northstar",
+      "clips": 16,
+      "bones": 133,
+      "model_sha256": "d4f766aa11ea881a42bf98a8c5f85abd8984d0aa704a60f662a825cc695d8867",
+      "animation_sha256": "449a0158f5ffa2aa26387469dabe559e325edb26a177161cbec1e91518ce7f37",
+      "max_position_error_inches": 0.06671306089066545,
+      "max_angle_error_degrees": 0.1938017577286072
+    },
+    {
+      "id": "ronin",
+      "clips": 16,
+      "bones": 106,
+      "model_sha256": "642b8fddeade6da2c864b7c3655fac8c3133e23427c14dcb222b29a84c3ae400",
+      "animation_sha256": "2334aa12b31ac05ab5f0dee86d42de38cd45005039997a40827d5f502acb3974",
+      "max_position_error_inches": 0.0661809020268167,
+      "max_angle_error_degrees": 0.1938017577286072
+    },
+    {
+      "id": "scorch",
+      "clips": 16,
+      "bones": 119,
+      "model_sha256": "94c66b60fb1df39154ad3700a8c8995ccb3d7e774c4cb483e3f3138818475d8e",
+      "animation_sha256": "5c5a648adf7be32268200c3495d9248a83e2744c13c3af09acc23ba710b14954",
+      "max_position_error_inches": 0.06340158397827204,
+      "max_angle_error_degrees": 0.1937769091380046
+    },
+    {
+      "id": "legion",
+      "clips": 16,
+      "bones": 121,
+      "model_sha256": "2f725f0d296e09e4b2a61896289d9862e50b16e9886b85a77b7cc1daa18473b8",
+      "animation_sha256": "6aafd2775f6a3b962bf7ea438c4fd3e682cfdc1a39c400ddbef17b4b4b6698b1",
+      "max_position_error_inches": 0.06586099069451053,
+      "max_angle_error_degrees": 0.1937769091380046
+    },
+    {
+      "id": "ion_prime",
+      "clips": 16,
+      "bones": 175,
+      "model_sha256": "a5c5cc79f9ebd8c2681fd868e5ca84a027158445a816cc7e5ec03a554eddeaa0",
+      "animation_sha256": "c62a470c478d71cac2111d34b4b156f4bda7ad6dd79ab522d7980e67d9b09d06",
+      "max_position_error_inches": 0.06661983320761698,
+      "max_angle_error_degrees": 0.2062897919910753
+    },
+    {
+      "id": "tone_prime",
+      "clips": 16,
+      "bones": 189,
+      "model_sha256": "97b843c4557a7a02e8a9f2d57410f2c9319fc7670ef8a10f05cfce4de3a96dbe",
+      "animation_sha256": "87d06478a1cba55bd8a7cc3e4fc9e76a805d0fb97377cab47971cfdce26b5d7a",
+      "max_position_error_inches": 0.06282587633093331,
+      "max_angle_error_degrees": 0.2062897919910753
+    },
+    {
+      "id": "northstar_prime",
+      "clips": 16,
+      "bones": 131,
+      "model_sha256": "6fc883780acfc9f762a41b04e8ab75c510986efdf4099bc3862b9d85529f0370",
+      "animation_sha256": "74442916ba3152c3c9ebf5cbe93b42ecb991fbc1f1d06a143f6aa07bc1b195ac",
+      "max_position_error_inches": 0.06717836413908572,
+      "max_angle_error_degrees": 0.1938017577286072
+    },
+    {
+      "id": "ronin_prime",
+      "clips": 16,
+      "bones": 106,
+      "model_sha256": "ddd6e46d8476b6baa0a3a9b22d15263a7830fd23c891e6b6fd0f823d12e544ed",
+      "animation_sha256": "8ff0c9827629c61ced209929e0d540eb5655c3fe652bbd16af15e436bcc59b54",
+      "max_position_error_inches": 0.06363999630917978,
+      "max_angle_error_degrees": 0.1938017577286072
+    },
+    {
+      "id": "scorch_prime",
+      "clips": 16,
+      "bones": 114,
+      "model_sha256": "0028c3d77c0d60d86bc273a596d5299464969ced4f7923db3570ce0b5042a635",
+      "animation_sha256": "abd3d7394802149c94b7835d2c94ecd70bf9f6a09e683361815b0b4b64d91ec7",
+      "max_position_error_inches": 0.06746054959991071,
+      "max_angle_error_degrees": 0.1937769091380046
+    },
+    {
+      "id": "legion_prime",
+      "clips": 16,
+      "bones": 114,
+      "model_sha256": "7e33d9bd4bf9aed89a99a768ff478ac2961469a5fd6d6d80cf8f7553b526a842",
+      "animation_sha256": "20ca164f5aeabe3680a16c3c56a85372d536558d7a9885be651e75091203ce52",
+      "max_position_error_inches": 0.06377404390081147,
+      "max_angle_error_degrees": 0.1937769091380046
+    }
+  ]
+}

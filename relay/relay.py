@@ -12,8 +12,10 @@ from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.2.0"
-MAX_BODY_BYTES = 2048
+from identity import Sessions, AuthRejected, AuthorityUnavailable
+
+VERSION = "0.3.0"
+MAX_BODY_BYTES = 8192
 MAX_ROOM_PLAYERS = 32
 PEER_TIMEOUT_SECONDS = 6
 REQUEST_TIMEOUT_SECONDS = 3
@@ -64,7 +66,9 @@ class Room:
             or int(player_id) == 0
         ):
             raise ValueError("invalid UID")
-        if not isinstance(map_name, str) or not re.fullmatch(r"mp_[a-zA-Z0-9_]{1,80}", map_name):
+        if not isinstance(map_name, str) or not re.fullmatch(
+            r"mp_[a-zA-Z0-9_]{1,80}", map_name
+        ):
             raise ValueError("invalid map")
         if not isinstance(playback_id, str) or not re.fullmatch(
             r"[a-zA-Z0-9_.-]{1,80}", playback_id
@@ -124,9 +128,18 @@ class Room:
 class RequestBudget:
     """Bound total traffic as well as traffic from one address."""
 
-    def __init__(self, clock=time.monotonic):
+    def __init__(
+        self,
+        clock=time.monotonic,
+        rate=12.0,
+        capacity=24.0,
+        total_rate=80.0,
+        total_capacity=160.0,
+    ):
         self.clock = clock
-        self.global_tokens = 160.0
+        self.rate, self.capacity = rate, capacity
+        self.total_rate, self.total_capacity = total_rate, total_capacity
+        self.global_tokens = total_capacity
         self.last_global = clock()
         self.addresses = OrderedDict()
         self.lock = threading.Lock()
@@ -134,14 +147,19 @@ class RequestBudget:
     def allow(self, address, shared_proxy=False):
         now = self.clock()
         with self.lock:
-            self.global_tokens = min(160.0, self.global_tokens + (now - self.last_global) * 80)
+            self.global_tokens = min(
+                self.total_capacity,
+                self.global_tokens + (now - self.last_global) * self.total_rate,
+            )
             self.last_global = now
             if self.global_tokens < 1:
                 return False
             self.global_tokens -= 1
 
             # without a configured proxy header all proxied users share this bucket.
-            rate, capacity = (80.0, 160.0) if shared_proxy else (12.0, 24.0)
+            rate, capacity = (
+                (80.0, 160.0) if shared_proxy else (self.rate, self.capacity)
+            )
             tokens, last = self.addresses.pop(address, (capacity, now))
             tokens = min(capacity, tokens + (now - last) * rate)
             allowed = tokens >= 1
@@ -159,6 +177,10 @@ class Server(ThreadingHTTPServer):
         super().__init__(address, Handler)
         self.key = key
         self.room = Room()
+        self.sessions = Sessions()
+        self.auth_budget = RequestBudget(
+            rate=0.1, capacity=3, total_rate=1, total_capacity=4
+        )
         self.budget = RequestBudget()
         self.trust_proxy_header = trust_proxy_header
         self.slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
@@ -234,6 +256,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(400, {"error": "invalid proxy header"})
                 return False
             shared_proxy = False
+        self.request_address = address
         if not self.server.budget.allow(address, shared_proxy):
             self.reply(429, {"error": "slow down"})
             return False
@@ -246,23 +269,37 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404, {"error": "not found"})
             return
         self.reply(
-            200, {"service": "emote-relay-prototype", "version": VERSION, "emotes": len(EMOTES)}
+            200,
+            {
+                "service": "emote-relay-prototype",
+                "version": VERSION,
+                "emotes": len(EMOTES),
+            },
         )
 
     def do_POST(self):
         if not self.request_allowed():
             return
-        if self.path != "/sync":
+        if self.path not in ("/sync", "/auth"):
             self.reply(404, {"error": "not found"})
             return
         auth = self.headers.get_all("Authorization", [])
-        if (
-            len(auth) != 1
-            or len(auth[0]) > 256
-            or not hmac.compare_digest(auth[0].encode(), ("Bearer " + self.server.key).encode())
-        ):
-            self.reply(401, {"error": "invalid room key"})
+        if len(auth) != 1 or len(auth[0]) > 256 or not auth[0].startswith("Bearer "):
+            self.reply(401, {"error": "authentication required"})
             return
+        bearer = auth[0][7:]
+        if self.path == "/auth":
+            if not hmac.compare_digest(bearer.encode(), self.server.key.encode()):
+                self.reply(401, {"error": "invalid room key"})
+                return
+            if not self.server.auth_budget.allow(self.request_address):
+                self.reply(429, {"error": "authentication rate limited"})
+                return
+        else:
+            verified_uid = self.server.sessions.resolve(bearer)
+            if verified_uid is None:
+                self.reply(401, {"error": "session expired or invalid"})
+                return
         lengths = self.headers.get_all("Content-Length", [])
         if self.headers.get("Transfer-Encoding") is not None or len(lengths) != 1:
             self.reply(400, {"error": "invalid framing"})
@@ -278,7 +315,18 @@ class Handler(BaseHTTPRequestHandler):
             if len(raw) != length:
                 raise ValueError("incomplete body")
             data = json.loads(raw, parse_constant=reject_nonfinite_number)
-            status, body = self.server.room.sync(data)
+            if self.path == "/auth":
+                status, body = 200, self.server.sessions.authenticate(data)
+            else:
+                if not isinstance(data, dict) or "uid" in data:
+                    raise ValueError("sync identity comes from the session")
+                status, body = self.server.room.sync(dict(data, uid=verified_uid))
+        except AuthRejected:
+            self.reply(401, {"error": "EA verification rejected"})
+            return
+        except AuthorityUnavailable:
+            self.reply(503, {"error": "EA verification unavailable"})
+            return
         except (ValueError, TypeError, UnicodeError, RecursionError):
             self.reply(400, {"error": "invalid request"})
             return

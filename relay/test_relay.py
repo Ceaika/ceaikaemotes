@@ -1,5 +1,6 @@
 import json, threading, time, unittest, urllib.request, urllib.error
 from relay import Room, Server, EMOTES, TRAVERSAL
+from identity import Sessions
 
 
 class Tests(unittest.TestCase):
@@ -55,14 +56,20 @@ class Tests(unittest.TestCase):
 
     def test_all_emotes_over_http_to_second_peer(self):
         srv = Server(("127.0.0.1", 0), "test-secret")
+        srv.sessions = Sessions(verifier=lambda uid, code: None)
         thread = threading.Thread(target=srv.serve_forever, daemon=True)
         thread.start()
         try:
             url = f"http://127.0.0.1:{srv.server_port}/sync"
 
+            tokens = {}
             def post(data):
+                data = dict(data)
+                uid = data.pop("uid")
+                if uid not in tokens:
+                    tokens[uid] = srv.sessions.authenticate({"uid":uid,"code":"test-code-"+uid})["token"]
                 req = urllib.request.Request(
-                    url, json.dumps(data).encode(), {"Authorization": "Bearer test-secret"}
+                    url, json.dumps(data).encode(), {"Authorization": "Bearer "+tokens[uid]}
                 )
                 return json.load(urllib.request.urlopen(req))
 
@@ -90,23 +97,25 @@ class Tests(unittest.TestCase):
 
     def test_http_auth_and_invalid_input(self):
         srv = Server(("127.0.0.1", 0), "test-secret")
+        srv.sessions = Sessions(verifier=lambda uid, code: None)
         thread = threading.Thread(target=srv.serve_forever, daemon=True)
         thread.start()
         try:
             url = f"http://127.0.0.1:{srv.server_port}/sync"
+            token = srv.sessions.authenticate({"uid":"123","code":"test-code-http"})["token"]
             for body, key, expected in [
                 (b"{}", "bad", 401),
-                (b"[]", "test-secret", 400),
-                (b"x" * 2049, "test-secret", 413),
+                (b"[]", token, 400),
+                (b"x" * 8193, token, 413),
             ]:
                 req = urllib.request.Request(url, body, {"Authorization": "Bearer " + key})
                 with self.assertRaises(urllib.error.HTTPError) as error:
                     urllib.request.urlopen(req)
                 self.assertEqual(error.exception.code, expected)
             data = json.dumps(
-                dict(uid="123", map="mp_colony", nonce="one", emote="bbd_traversal")
+                dict(map="mp_colony", nonce="one", emote="bbd_traversal")
             ).encode()
-            req = urllib.request.Request(url, data, {"Authorization": "Bearer test-secret"})
+            req = urllib.request.Request(url, data, {"Authorization": "Bearer "+token})
             self.assertEqual(
                 json.load(urllib.request.urlopen(req))["peers"][0]["emote"], "bbd_traversal"
             )

@@ -1,6 +1,6 @@
 {
     "Name": "ceaikaemotes",
-    "Version": "0.2.1",
+    "Version": "0.3.0",
     "LoadPriority": 30,
     "RequiredOnClient": false,
     "Description": "experimental lol",
@@ -34,6 +34,13 @@
                 "Before": "CeaikaEmotes_AddMenu",
                 "After": "CeaikaEmotes_Settings"
             }
+        },
+        {
+            "Path": "ui_ceaikaemotes_auth.nut",
+            "RunOn": "UI",
+            "UICallback": {
+                "After": "CeaikaEmotes_AuthUIInit"
+            }
         }
     ],
     "ConVars": [
@@ -47,7 +54,8 @@
         },
         {
             "Name": "em_enabled",
-            "DefaultValue": "1"
+            "DefaultValue": "1",
+            "Flags": "ARCHIVE_PLAYERPROFILE"
         },
         {
             "Name": "em_music",
@@ -107,6 +115,23 @@
             "Name": "em_traversal",
             "DefaultValue": "1",
             "Flags": "ARCHIVE_PLAYERPROFILE"
+        },
+        {
+            "Name": "em_auth_state",
+            "DefaultValue": "0000"
+        },
+        {
+            "Name": "em_auth_request",
+            "DefaultValue": ""
+        },
+        {
+            "Name": "em_auth_allowed_url",
+            "DefaultValue": "",
+            "Flags": "ARCHIVE_PLAYERPROFILE"
+        },
+        {
+            "Name": "em_auth_session",
+            "DefaultValue": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
         }
     ],
     "ConCommands": [
@@ -138,6 +163,16 @@
         {
             "Name": "em_list",
             "Function": "CeaikaEmotes_List",
+            "Context": "CLIENT"
+        },
+        {
+            "Name": "em_auth_accept",
+            "Function": "CeaikaEmotes_AuthAccept",
+            "Context": "CLIENT"
+        },
+        {
+            "Name": "em_auth_revoke",
+            "Function": "CeaikaEmotes_AuthRevoke",
             "Context": "CLIENT"
         }
     ]

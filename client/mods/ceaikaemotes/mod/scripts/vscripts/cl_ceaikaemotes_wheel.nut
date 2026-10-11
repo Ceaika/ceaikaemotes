@@ -31,7 +31,7 @@ void function CeaikaEmotes_OpenCommand(array<string> args = [])
 void function CeaikaEmotes_Open(int holdKey)
 {
     entity player = GetLocalClientPlayer()
-    if(!IsValid(player) || !IsAlive(player) || player.IsTitan() || clGlobal.isMenuOpen || file.wheelOpen) return
+    if(!IsValid(player) || !IsAlive(player) || clGlobal.isMenuOpen || file.wheelOpen) return
     file.wheelOpen = true
     file.generation++
     RunUIScript("CeaikaEmotes_OpenWheel", holdKey)
@@ -56,7 +56,7 @@ void function CeaikaEmotes_WheelWatch(int generation)
     while(file.wheelOpen && generation == file.generation)
     {
         entity player = GetLocalClientPlayer()
-        if(!IsValid(player) || !IsAlive(player) || player.IsTitan())
+        if(!IsValid(player) || !IsAlive(player))
         {
             RunUIScript("CeaikaEmotes_CloseWheel")
             CeaikaEmotes_WheelClosed()

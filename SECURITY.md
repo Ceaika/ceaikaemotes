@@ -1,25 +1,35 @@
 # the relay and the VPS
 
-the room key only gets you into the emote API. it isn't an SSH key, shell password or admin token. the relay accepts `POST /sync` and `GET /health`; it doesn't have routes for running commands, browsing files or using the admin tool.
+the bundled room key is public. it isn't an SSH key, admin password or proof that you own a player UID. it only lets a client attempt account verification.
 
-**but a key shared with everyone isn't proof of who sent a request.** someone with it can send an emote under another UID, fill available room slots or otherwise annoy people using that room. publishing the same key doesn't solve identity. for that we'd need an actual identity-verification system, not a longer shared password.
+## what proves the account
 
-## what's bounded in this version
+the DLL requests a fresh, short-lived EA code through OriginSDK. after the player approves the relay, it sends that code and UID to `POST /auth`. the relay checks them with Respawn's Stryder service, including Titanfall 2 entitlement and online access. it then issues a random 30-minute emote session bound to that UID.
 
-- requests have a 2048-byte body limit and a small fixed set of fields. emotes come from an allowlist; no filenames or executable commands are accepted.
-- the room holds up to 32 active players, with old entries expiring after 6 seconds. reused playback IDs don't reset the clock.
-- connections are limited to 16, sockets time out after 3 seconds, and global/IP token buckets limit request frequency. the IP bookkeeping itself has a size limit.
-- malformed JSON, unknown fields, conflicting length headers and chunked requests are rejected. the room key is compared without an ordinary early-exit string comparison.
-- the example deployment runs without root, with a read-only container filesystem, dropped capabilities and resource limits. it doesn't mount your admin directory or Docker socket.
+`POST /sync` uses that session. the server derives the UID itself and rejects a UID supplied in the body. the room key alone cannot sync an emote. used EA codes are tracked by hash to reject replays; session bearers are also stored by hash. only one session per UID stays active after reauthentication.
 
-this makes abuse more limited. it doesn't make a public VPS impossible to attack, stop bandwidth floods, or audit every other service on the machine. these limits apply to the relay code in this repository; a hosted instance may run a different version. a client update doesn't update your running relay.
+the code follows the existing [Atlas verifier](https://github.com/R2Northstar/Atlas/blob/main/pkg/stryder/stryder.go) and [Ion Origin-code request](https://github.com/r2ion/IonLauncher/blob/ion/src/client/origin.cpp). the native exchange uses certificate-checked HTTPS and refuses redirects. neither the client nor relay intentionally logs or stores raw EA codes.
 
-## hosting rules that matter
+## what the player agrees to
 
-keep the backend on loopback or a private container network. put HTTPS in front of it. don't reuse the room key as any admin credential. the client and source release deliberately include the shared emote-room key so fresh installs work together. treat it as public from this release onward. private server configs and admin credentials are still excluded.
+this still means trusting the relay with a short-lived EA credential. the first in-game prompt names the relay and explains the transfer. accepting remembers that exact address. later launches and session renewals run automatically. changing the address needs another approval. no code is sent before approval.
 
-only enable `--trust-proxy-header` when clients can't reach the backend directly and your reverse proxy overwrites `X-Emote-Client-IP`. otherwise someone can choose their own apparent IP. without that option the relay uses the connection's address; a local proxy shares the fallback bucket rather than pretending to know the end user's address.
+permission lives in the player's profile; the EA code and session token do not. **Mod Settings > ceaikaemotes > Online emotes** can forget the permission or turn syncing off. `em_auth_revoke` remains available too. this stops the client from syncing; it does not remotely invalidate a token someone already copied. that token expires on the server, and a new successful login replaces the previous session.
 
-if you host the relay alongside an admin site, keep their application routes and credentials separate. don't replace an existing Caddyfile with an example that deletes the admin site's configuration.
+never paste `em_auth_session` into an issue or share raw codes. a modified client can access its own memory, so local tokens aren't protected from the person running that client.
 
-if you find a bug, contact the maintainer through the repository's available private reporting channel where possible. don't post private-room keys, admin credentials, request headers or unredacted configs in a public issue. the bundled public-room key is already visible in mod.json. ordinary reproduction steps without secrets are useful.
+## what's still possible
+
+a verified player can still lie about their own selected emote or map. account verification doesn't prove which match they're in, prevent spam by real accounts, or make the VPS immune to attacks. anyone without the mod still sees the normal game model. the relay has no shell, file-browser or admin-tool endpoints.
+
+requests have an 8192-byte body limit and a fixed emote allowlist. the room holds 32 entries and drops stale ones after six seconds. connections, timeouts, global/IP request budgets and authentication concurrency are bounded. invalid framing, unknown fields and malformed requests are rejected. these are practical limits, not a DDoS shield.
+
+## hosting
+
+keep the backend on loopback or a private container network, behind HTTPS. use a separate admin login. the example container is non-root, read-only, capability-free and resource-limited; it doesn't mount the Docker socket or your admin files.
+
+only enable `--trust-proxy-header` if clients cannot reach the backend directly and your proxy overwrites `X-Emote-Client-IP`. otherwise a client can forge its apparent address. don't log outgoing Stryder URLs: the query contains the EA code. the supplied verifier redacts upstream exceptions for that reason.
+
+the verified protocol needs both the 0.3.0 client and relay. a client download does not update a hosted backend, and legacy clients cannot use the new sessions. see [hosting](docs/hosting.md).
+
+if you find a security bug, use the repository's private reporting channel where available. send a reproduction without credentials. the bundled public room key is already visible in mod.json; admin credentials and private-room keys are not part of the release.

@@ -1,6 +1,6 @@
 # ceaikaemotes
 
-ok so basically this lets you emote with other people who have the mod, without needing the game server to install it. there's 16 emotes, the wheel from party pack, music that gets quieter as you walk away, and traversal for billy bounce and griddy.
+ok so basically this lets you emote with other people who have the mod, without needing the game server to install it. there's 16 emotes for pilots and titans, the wheel from party pack, music that gets quieter as you walk away, and traversal for billy bounce and griddy.
 
 this is experimental lol. **you need Ion and the included DLL.** this isn't a mod that makes everyone on a vanilla client see you dancing. they need ceaikaemotes too, with the same relay and room key.
 
@@ -10,11 +10,19 @@ close the game first. from the client zip, put `mods/ceaikaemotes` in `R2Northst
 
 if you install it as a Northstar package instead, keep the whole package together under `R2Northstar/packages/<package name>`. don't also install a second manual copy. the native helper uses Windows audio, so this release is for Windows Ion; Linux/Wine behaviour hasn't been verified here.
 
-the relay URL and shared room key are already included, and emotes are enabled by default. install it, launch Ion and join your friends in the same match. nobody needs to type `emkey` or `em_enabled 1` on a fresh install. Ion still needs HTTP enabled so it can reach the relay.
+the relay address and shared room key are included, and emotes are enabled by default. join a match and accept the in-game verification prompt. it remembers that relay, so after that the login and session renewal happen automatically. no console commands needed. Ion still needs HTTP enabled.
 
-the bundled key is public. it only selects/accesses the emote room, it isn't a VPS password or admin login. if you previously put a different `emkey`, `em_url` or `em_enabled 0` in your autoexec, that will override these defaults. you can still use those commands for another relay or to turn this one off. these settings don't have archive flags, so persistent custom settings belong in your own autoexec.
+the prompt matters because the mod sends a fresh, short-lived EA authentication code to the relay, which checks it with Respawn. it doesn't ask for your EA password. only allow a relay you trust. **Mod Settings > ceaikaemotes > Online emotes** lets you review or forget the permission and turn syncing off.
 
-hold **B** for the wheel, use **Q/E** for the other page, release to choose, or **Escape** to cancel. the mod settings have wheel controls and a traversal toggle. only billy bounce and griddy can move, and they use crouch speed. jumping or attacking stops the emote.
+the bundled key is public. it only selects/accesses the emote room, it isn't a VPS password or admin login. if you previously put a different `emkey`, `em_url` or `em_enabled 0` in your autoexec, that will override these defaults. you can still use those commands for another relay or to turn this one off. your enabled setting and relay permission are saved in your profile. a custom address/key can still go in your own autoexec. changing the relay address needs a new approval.
+
+hold **B** for the wheel, scroll for the other page (**Q/E** also works), release to choose, or **Escape** to cancel. the mod settings have wheel controls and a traversal toggle. only billy bounce and griddy can move, and they use crouch speed. jumping or attacking stops the emote. titan melee stops it too.
+
+## titans
+
+all 16 dances work on ion, scorch, northstar, ronin, tone, legion and monarch, plus the six prime models. use the same wheel. the camera moves farther back so your titan actually fits.
+
+the rigs keep their own proportions. cockpit parts stay in their closed pose and the atlas fingers use their normal in-game offsets. bulky titans can still clip their arms or slide their feet a bit. this is animation retargeting, not a new collision system.
 
 ## rebinding the wheel
 
@@ -44,18 +52,19 @@ that opens the wheel with a tap, then you click an emote. it doesn't use release
 | `em_url "https://your-host/emotes"` | use a different relay |
 | `em_status` | print the useful debug bits |
 | `em_probe` | check relay health |
+| `em_auth_accept` / `em_auth_revoke` | optional console versions of the relay permission controls |
 
 ## how this actually works
 
-the relay just tells the other clients which emote you picked and how long it's been playing. their game already knows where your pilot is. each client puts an animated copy there, hides the normal pilot locally, and plays its own copy of the music at the right point. no audio files are being streamed through the VPS.
+the relay just tells the other clients which emote you picked and how long it's been playing. their game already knows where your pilot or titan is. each client puts an animated copy there, hides the normal player model locally, and plays its own copy of the music at the right point. no audio files are being streamed through the VPS.
 
-the DLL handles the bits scripts couldn't do reliably: hiding the real model and its weapons, the local third person camera, and the music mixer. it doesn't change `sv_cheats`, send commands to the game server, or make people without the mod see the emote.
+the DLL handles the bits scripts couldn't do reliably: hiding the real model and its weapons, the local third person camera, the music mixer, and requesting the fresh EA code for relay authentication. it doesn't change `sv_cheats`, send commands to the game server, or make people without the mod see the emote.
 
 to keep the overhead down, idle music closes its audio device and the DLL polls less often when nothing is playing. memory checks are reused within each frame, and remote emotes outside your view skip their animated copies until you look back. music still works behind you.
 
 ## limitations
 
-some animations can look stepped even at high FPS, music doesn't get muffled by walls, and the dancing model doesn't change the server's hitbox. the DLL also depends on a supported engine build. another mod replacing the same pilot models can conflict with it.
+some animations can look stepped even at high FPS, music doesn't get muffled by walls, and the dancing model doesn't change the server's hitbox. the DLL also depends on a supported engine build. another mod replacing the same pilot or titan models can conflict with it.
 
 ## more info
 
@@ -63,6 +72,7 @@ these pages explain the setup, the engine limitations behind the design, and wha
 
 - [compatibility and test coverage](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/verification.md)
 - [how it works, and why](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/how-it-works.md)
+- [titan retargeting](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/titans.md)
 - [asset tools and credits](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/asset-tools.md)
 - [building it and testing changes](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/development.md)
 - [hosting a relay](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/hosting.md)

@@ -7,6 +7,7 @@ services:
     command: ["python", "-B", "-u", "relay.py", "--bind", "127.0.0.1", "--key-file", "/run/secrets/room.key"]
     volumes:
       - ./relay.py:/app/relay.py:ro
+      - ./identity.py:/app/identity.py:ro
       - ./room.key:/run/secrets/room.key:ro
     read_only: true
     cap_drop: [ALL]

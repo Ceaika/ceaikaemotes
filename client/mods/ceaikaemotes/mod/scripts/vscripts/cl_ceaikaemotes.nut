@@ -1,4 +1,6 @@
 untyped
+global function CeaikaEmotes_AuthAccept
+global function CeaikaEmotes_AuthRevoke
 global function CeaikaEmotes_Init
 global function CeaikaEmotes_Play
 global function CeaikaEmotes_Stop
@@ -7,6 +9,14 @@ global function CeaikaEmotes_Probe
 global function CeaikaEmotes_List
 struct
 {
+    string sessionToken = ""
+    string sessionUid = ""
+    string sessionUrl = ""
+    float sessionExpires = 0.0
+    float nextAuthAttempt = 0.0
+    int authSerial = 0
+    bool authPending = false
+    bool consentNotice = false
     bool requestInFlight = false
     bool started = false
     string emote = ""
@@ -19,13 +29,44 @@ struct
     bool drawIdle = true
     int culled = 0
     int pulse = 0
+    int uidReads = 0
+    table playerUIDs
     table peers
     table retryAfter
     table cancelledPlayback
     table dancers
 } relay
+
+string function CeaikaEmotes_PlayerUID(entity player)
+{
+    if(!IsValid(player)) return ""
+    if(!(player in relay.playerUIDs))
+    {
+        // slots get reused when someone leaves. cache the actual entity.
+        array<entity> stale
+        foreach(entity cachedPlayer, var entry in relay.playerUIDs)
+            if(!IsValid(cachedPlayer)) stale.append(cachedPlayer)
+        foreach(entity cachedPlayer in stale) delete relay.playerUIDs[cachedPlayer]
+        relay.playerUIDs[player] <- {uid = "", nextRead = 0.0}
+    }
+    var entry = relay.playerUIDs[player]
+    if(entry.uid != "" || Time() < expect float(entry.nextRead))
+        return expect string(entry.uid)
+
+    // some Ion builds spam the console on every GetUID call.
+    entry.nextRead = Time() + 2.0
+    string uid = GetUID(player)
+    relay.uidReads++
+    if(uid != "" && uid != "0") entry.uid = uid
+    return expect string(entry.uid)
+}
+
 void function CeaikaEmotes_Init()
 {
+    AddDestroyCallback("player", void function(entity player)
+    {
+        if(player in relay.playerUIDs) delete relay.playerUIDs[player]
+    })
     foreach (asset nativeModel, asset model in CeaikaEmotes_Models()) PrecacheModel(model)
     SetConVarString("em_native_request", "")
     SetConVarString("em_audio_request", "")
@@ -36,10 +77,94 @@ void function CeaikaEmotes_Init()
     })
 }
 
+void function CeaikaEmotes_AuthAccept(array<string> args = [])
+{
+    string url = GetConVarString("em_url")
+    if(url.find("https://") != 0)
+    {
+        print("[EmoteRelay] Account verification requires an HTTPS relay.")
+        return
+    }
+    SetConVarString("em_auth_allowed_url", url)
+    SetConVarBool("em_enabled", true)
+    relay.nextAuthAttempt = 0.0
+    print("[EmoteRelay] Allowed EA account verification at "+url+". Use em_auth_revoke to withdraw permission.")
+}
+void function CeaikaEmotes_AuthRevoke(array<string> args = [])
+{
+    SetConVarString("em_auth_allowed_url", "")
+    SetConVarString("em_auth_request", "")
+    relay.sessionToken = ""
+    relay.authPending = false
+    relay.consentNotice = false
+    SetConVarBool("em_enabled", false)
+    CeaikaEmotes_Stop()
+    relay.peers.clear()
+    print("[EmoteRelay] Verification permission removed; online emote syncing stopped.")
+}
+bool function CeaikaEmotes_EnsureSession(string uid, string url)
+{
+    if(GetConVarString("em_auth_allowed_url") != url || url.find("https://") != 0)
+    {
+        SetConVarString("em_auth_request", "")
+        relay.sessionToken = ""
+        relay.authPending = false
+        relay.peers.clear()
+        if(!relay.consentNotice)
+        {
+            print("[EmoteRelay] To verify your identity, this mod sends a fresh EA authentication code to "+url+".")
+            print("[EmoteRelay] Only approve a relay you trust. It verifies the code with Respawn and issues an emote-only session.")
+            print("[EmoteRelay] Accept the in-game prompt or use Mod Settings > ceaikaemotes > Online emotes. Nothing is sent before you allow it.")
+            relay.consentNotice = true
+        }
+        return false
+    }
+    if(relay.sessionUid != uid || relay.sessionUrl != url)
+    {
+        relay.sessionToken = ""
+        relay.authPending = false
+        relay.nextAuthAttempt = 0.0
+        relay.sessionUid = uid
+        relay.sessionUrl = url
+    }
+    if(relay.sessionToken != "" && Time()<relay.sessionExpires) return true
+    int state = GetConVarInt("em_auth_state")
+    if(relay.authPending)
+    {
+        if(state == 2)
+        {
+            string token = GetConVarString("em_auth_session")
+            if(token.len() == 64)
+            {
+                relay.sessionToken = token
+                relay.sessionExpires = Time()+1740.0
+                relay.authPending = false
+                print("[EmoteRelay] EA account verified; emote session ready.")
+                return true
+            }
+        }
+        else if(state >= 3)
+        {
+            relay.authPending = false
+            relay.nextAuthAttempt = Time()+60.0
+            CeaikaEmotes_Error("Account verification failed (stage "+state+"). No fallback to unverified identity.")
+        }
+        return false
+    }
+    if(Time()<relay.nextAuthAttempt) return false
+    relay.authSerial++
+    // clear the last result before asking again.
+    SetConVarInt("em_auth_state", 0)
+    SetConVarString("em_auth_request", uid+":"+int(Time()*1000)+":"+relay.authSerial)
+    relay.authPending = true
+    relay.nextAuthAttempt = Time()+60.0
+    return false
+}
+
 void function CeaikaEmotes_Play(array<string> args = [])
 {
     entity player = GetLocalClientPlayer()
-    if(!IsValid(player) || !IsAlive(player) || player.IsTitan() || !player.IsOnGround()) return
+    if(!IsValid(player) || !IsAlive(player) || !player.IsOnGround()) return
     if(GetConVarString("em_url") == "" || GetConVarString("emkey") == "")
     {
         print("[EmoteRelay] Set em_url and emkey first.");
@@ -58,6 +183,11 @@ void function CeaikaEmotes_Play(array<string> args = [])
         return;
     }
     CeaikaEmoteDef emoteDef = CeaikaEmotes_Catalog()[index]
+    if(!CeaikaEmotes_SupportsEmote(player, emoteDef.id))
+    {
+        print("[EmoteRelay] This Titan model does not have an emote rig.")
+        return
+    }
     bool traversal = args.len()>1 && args[1] == "traversal"
     if(traversal && !emoteDef.traversal)
     {
@@ -104,10 +234,12 @@ void function CeaikaEmotes_ReleaseDuck()
 void function CeaikaEmotes_Status(array<string> args = [])
 {
     entity player = GetLocalClientPlayer()
+    print("[EmoteRelay] authState="+GetConVarInt("em_auth_state")+" sessionReady="+(relay.sessionToken != ""))
     print("[EmoteRelay] idle="+relay.drawIdle+" audioSleeping="+GetConVarInt("em_audio_idle")+" audioDeviceOpen="+GetConVarInt("em_audio_device"))
     print("[EmoteRelay] audioReady="+GetConVarInt("em_audio_ready")+" voices="+GetConVarInt("em_audio_voices"))
     print("[EmoteRelay] enabled="+GetConVarBool("em_enabled")+" HTTP="+NSIsHttpEnabled()+" peers="+relay.peers.len()+" visuals="+relay.dancers.len()+" culled="+relay.culled+" native="+GetConVarInt("em_native_ready")+" hidden="+GetConVarInt("em_native_hidden")+" replyAge="+(Time()-relay.lastReplyTime))
-    if(IsValid(player)) print("[EmoteRelay] Local player UID available="+(GetUID(player) != "0"))
+    print("[EmoteRelay] uidCached="+relay.playerUIDs.len()+" uidReads="+relay.uidReads)
+    if(IsValid(player)) print("[EmoteRelay] Local player UID available="+(CeaikaEmotes_PlayerUID(player) != ""))
 }
 
 void function CeaikaEmotes_Probe(array<string> args = [])
@@ -138,20 +270,20 @@ void function CeaikaEmotes_PollRelay()
             string key = GetConVarString("emkey")
             if(url != "" && key != "" && GetMapName().find("mp_") == 0)
             {
-                string playerId = GetUID(player)
-                if(playerId != "0" && playerId != "")
+                string playerId = CeaikaEmotes_PlayerUID(player)
+                if(playerId != "0" && playerId != "" && CeaikaEmotes_EnsureSession(playerId, url))
                 {
-                    if(!IsAlive(player) || player.IsTitan()) CeaikaEmotes_Stop()
+                    if(!IsAlive(player)) CeaikaEmotes_Stop()
                     HttpRequest request
                     request.method = HttpRequestMethod.POST
                     request.url = url+"/sync"
                     request.headers =
                     {
-                        Authorization = ["Bearer "+key]
+                        Authorization = ["Bearer "+relay.sessionToken]
                     }
                     request.body = EncodeJSON(
                     {
-                        uid = playerId, map = GetMapName(), emote = relay.emote, nonce = relay.nonce, traversal = relay.traversal
+                        map = GetMapName(), emote = relay.emote, nonce = relay.nonce, traversal = relay.traversal
                     })
                     request.timeout = 4
                     relay.requestInFlight = true
@@ -181,6 +313,11 @@ void function CeaikaEmotes_OnRelayReply(HttpRequestResponse result)
     relay.requestInFlight = false
     if(result.statusCode != 200)
     {
+        if(result.statusCode == 401)
+        {
+            relay.sessionToken = ""
+            relay.nextAuthAttempt = Time()+5.0
+        }
         CeaikaEmotes_Error("Relay returned HTTP "+result.statusCode);
         return;
     }
@@ -232,7 +369,7 @@ void function CeaikaEmotes_ClearCamera()
 
 void function CeaikaEmotes_Camera(entity player, entity model)
 {
-    SetConVarString("em_camera_request", clGlobal.isMenuOpen ? "0" : "1")
+    SetConVarString("em_camera_request", clGlobal.isMenuOpen ? "0" : (player.IsTitan() ? "2" : "1"))
 }
 
 float function CeaikaEmotes_SmoothYaw(float current, float target, float dt)
@@ -327,8 +464,9 @@ void function CeaikaEmotes_UpdateDancers()
         relay.drawIdle = false
         entity localPlayer = GetLocalClientPlayer()
         if(IsValid(localPlayer) && relay.emote != "" &&
-        (!IsAlive(localPlayer) || localPlayer.IsTitan() || !localPlayer.IsOnGround() || localPlayer.IsInputCommandHeld(IN_JUMP) ||
+        (!IsAlive(localPlayer) || !localPlayer.IsOnGround() || localPlayer.IsInputCommandHeld(IN_JUMP) ||
         localPlayer.IsInputCommandHeld(IN_ATTACK) ||
+        (localPlayer.IsTitan() && localPlayer.IsInputCommandHeld(IN_MELEE)) ||
         (!relay.traversal && (fabs(localPlayer.GetInputAxisForward())>0.1 || fabs(localPlayer.GetInputAxisRight())>0.1)) ||
         Length2D(localPlayer.GetVelocity())>(relay.traversal?260.0:80.0) || !GetConVarBool("em_enabled")))
         CeaikaEmotes_Stop()
@@ -362,13 +500,14 @@ void function CeaikaEmotes_UpdateDancers()
         {
             foreach(entity player in GetPlayerArray())
             {
-                if(!IsValid(player) || !IsAlive(player) || player.IsTitan()) continue
-                string playerId = GetUID(player)
+                if(!IsValid(player) || !IsAlive(player)) continue
+                string playerId = CeaikaEmotes_PlayerUID(player)
                 if(!(playerId in relay.peers)) continue
                 if(player == localPlayer && relay.emote == "") continue
                 asset original = player.GetModelName()
                 if(!(original in CeaikaEmotes_Models())) continue
                 var state = relay.peers[playerId]
+                if(!CeaikaEmotes_SupportsEmote(player, expect string(state.emote))) continue
                 // old relay reply, dont hide the player again after they land.
                 if(playerId in relay.cancelledPlayback && relay.cancelledPlayback[playerId].nonce == state.nonce && relay.cancelledPlayback[playerId].source == player) continue
                 if(!player.IsOnGround() || Length2D(player.GetVelocity())>(state.traversal?260.0:80.0))
@@ -394,7 +533,7 @@ void function CeaikaEmotes_UpdateDancers()
                     }
                 }
                 bool inView = player == localPlayer || player == viewer || !IsValid(viewer) ||
-                CeaikaEmotes_InView(player.GetOrigin()+<0, 0, 36>, viewOrigin, viewForward, viewRight, viewUp, tanX, tanY, playerId in relay.dancers ? 128.0 : 112.0)
+                CeaikaEmotes_InView(player.GetOrigin()+(player.IsTitan() ? <0, 0, 140> : <0, 0, 36>), viewOrigin, viewForward, viewRight, viewUp, tanX, tanY, player.IsTitan() ? 350.0 : (playerId in relay.dancers ? 128.0 : 112.0))
                 if(!inView)
                 {
                     // dont animate off-screen dancers. keep their music and hiding state.

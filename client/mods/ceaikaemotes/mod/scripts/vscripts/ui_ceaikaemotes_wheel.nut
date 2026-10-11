@@ -23,6 +23,10 @@ void function CeaikaEmotes_Settings()
     ModSettings_AddEnumSetting("em_wheel_key", "Hold to open emote wheel", ["Unbound", "B", "G", "H", "J"])
     ModSettings_AddEnumSetting("em_wheel_pad", "Hold controller emote wheel", ["Unbound", "D-pad Down"])
     ModSettings_AddEnumSetting("em_traversal", "Billy Bounce / Griddy movement", ["Stationary", "Traversal"])
+    ModSettings_AddModCategory("Online emotes")
+    ModSettings_AddEnumSetting("em_enabled", "Online emotes", ["Off", "On"])
+    ModSettings_AddButton("Review relay permission", CeaikaEmotes_ShowAuthDialog)
+    ModSettings_AddButton("Forget relay permission", CeaikaEmotes_ForgetRelay)
 }
 int function CeaikaEmotes_Sector(float x, float y)
 {
@@ -53,7 +57,8 @@ void function CeaikaEmotes_InitWheel()
     }
     AddMenuEventHandler(file.menu, eUIEvent.MENU_OPEN, CeaikaEmotes_DrawWheel)
     AddMenuEventHandler(file.menu, eUIEvent.MENU_CLOSE, CeaikaEmotes_Closed)
-    AddMenuFooterOption(file.menu, BUTTON_B, "#B_BUTTON_BACK", "#BACK")
+    AddCallback_InputEvent(InputEventType.IE_AnalogValueChanged, CeaikaEmotes_ScrollWheel)
+    Hud_Hide(Hud_GetChild(file.menu, "Hint"))
     var ring = Hud_GetRui(Hud_GetChild(file.menu, "Ring"))
     RuiSetImage(ring, "basicImage", $"rui/ceaika_emotes/ring")
     RuiSetFloat3(ring, "basicImageColor", <1, 1, 1>)
@@ -83,6 +88,21 @@ void function CeaikaEmotes_Closed()
     file.generation++
     if ( CanRunClientScript()) RunClientScript("CeaikaEmotes_WheelClosed")
 }
+
+void function CeaikaEmotes_ScrollWheel(int eventType, int tick, int input, int value, int delta)
+{
+    if(GetActiveMenu() != file.menu || input != AnalogCode.MOUSE_WHEEL || delta == 0) return
+    CeaikaEmotes_ChangePage(delta > 0 ? -1 : 1)
+}
+
+void function CeaikaEmotes_ChangePage(int direction)
+{
+    int pages = (CeaikaEmotes_Catalog().len()+7)/8
+    if(pages < 2) return
+    file.page = (file.page+pages+direction)%pages
+    file.selected = -1
+    CeaikaEmotes_DrawWheel()
+}
 void function CeaikaEmotes_Hold(int generation)
 {
     bool previousQ = false
@@ -97,12 +117,9 @@ void function CeaikaEmotes_Hold(int generation)
         }
         bool q = InputIsButtonDown(KEY_Q)
         bool e = InputIsButtonDown(KEY_E)
-        int pages = (CeaikaEmotes_Catalog().len()+7)/8
-        if ( pages>1 && ((q && !previousQ) || (e && !previousE)))
+        if ((q && !previousQ) || (e && !previousE))
         {
-            file.page = (file.page+pages+(q ? -1 : 1))%pages
-            file.selected = -1
-            CeaikaEmotes_DrawWheel()
+            CeaikaEmotes_ChangePage(q ? -1 : 1)
         }
         previousQ = q
         previousE = e
@@ -151,8 +168,7 @@ void function CeaikaEmotes_DrawWheel()
     }
     Hud_SetText(Hud_GetChild(file.menu, "Title"), "EMOTES")
     Hud_SetText(Hud_GetChild(file.menu, "Page"), (file.page+1)+" / "+((CeaikaEmotes_Catalog().len()+7)/8))
-    string help = file.holdKey < 0 ? "Aim at a name and click" : "Aim at a name, then release the held key"
-    Hud_SetText(Hud_GetChild(file.menu, "Hint"), help+"     Q / E: pages     Esc: cancel")
+    Hud_Hide(Hud_GetChild(file.menu, "Hint"))
     CeaikaEmotes_Hover(-1)
 }
 void function CeaikaEmotes_Hover(int slot)

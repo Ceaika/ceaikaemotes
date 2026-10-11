@@ -1,0 +1,80 @@
+[
+  {
+    "id": "ion",
+    "path": "models/titans/medium/titan_medium_ajax.mdl",
+    "bones": 179,
+    "rig": "d4b391b03109"
+  },
+  {
+    "id": "tone",
+    "path": "models/titans/medium/titan_medium_wraith.mdl",
+    "bones": 190,
+    "rig": "302c5a9282e8"
+  },
+  {
+    "id": "monarch",
+    "path": "models/titans/medium/titan_medium_vanguard.mdl",
+    "bones": 191,
+    "rig": "61e9c6e504a9"
+  },
+  {
+    "id": "northstar",
+    "path": "models/titans/light/titan_light_raptor.mdl",
+    "bones": 133,
+    "rig": "11d0cffdde83"
+  },
+  {
+    "id": "ronin",
+    "path": "models/titans/light/titan_light_locust.mdl",
+    "bones": 106,
+    "rig": "6346e80aeb45"
+  },
+  {
+    "id": "scorch",
+    "path": "models/titans/heavy/titan_heavy_ogre.mdl",
+    "bones": 119,
+    "rig": "f3880c1bb338"
+  },
+  {
+    "id": "legion",
+    "path": "models/titans/heavy/titan_heavy_deadbolt.mdl",
+    "bones": 121,
+    "rig": "034cae70e6cb"
+  },
+  {
+    "id": "ion_prime",
+    "path": "models/titans/medium/titan_medium_ion_prime.mdl",
+    "bones": 175,
+    "rig": "a0fb598dac86"
+  },
+  {
+    "id": "tone_prime",
+    "path": "models/titans/medium/titan_medium_tone_prime.mdl",
+    "bones": 189,
+    "rig": "98962509cc6f"
+  },
+  {
+    "id": "northstar_prime",
+    "path": "models/titans/light/titan_light_northstar_prime.mdl",
+    "bones": 131,
+    "rig": "61d2c43aba21"
+  },
+  {
+    "id": "ronin_prime",
+    "path": "models/titans/light/titan_light_ronin_prime.mdl",
+    "bones": 106,
+    "rig": "6346e80aeb45"
+  },
+  {
+    "id": "scorch_prime",
+    "path": "models/titans/heavy/titan_heavy_scorch_prime.mdl",
+    "bones": 114,
+    "rig": "181903f20eeb"
+  },
+  {
+    "id": "legion_prime",
+    "path": "models/titans/heavy/titan_heavy_legion_prime.mdl",
+    "bones": 114,
+    "rig": "181903f20eeb"
+  }
+]
