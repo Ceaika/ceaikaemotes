@@ -1,6 +1,5 @@
 [
   {
-    "model": "client/mods/ceaikaemotes/mod/models/ceaikaemotes/pilots/cat_ears_f.mdl",
     "source_mdl_sha256": "59fa9c87f9228597701236d7054fa22e2f86604206587e8fd04c8017ca386b9c",
     "packages": [
       {
@@ -23,10 +22,13 @@
         "mod_json": "mods/pulse_cat_ears_female/mod.json",
         "mod_name": "CAT.EARS.Tech.Test.Pulse.Blade.Female"
       }
+    ],
+    "generated_models": [
+      "models/humans/pilots/pilot_medium_geist_f.mdl",
+      "models/humans/pilots/pilot_medium_reaper_f.mdl"
     ]
   },
   {
-    "model": "client/mods/ceaikaemotes/mod/models/ceaikaemotes/pilots/cat_ears_m.mdl",
     "source_mdl_sha256": "92e82d045cd765260e99f216c07061d42684fd75cd4ad1180bdd909f921d9c58",
     "packages": [
       {
@@ -49,6 +51,10 @@
         "mod_json": "mods/pulse_cat_ears_male/Locked_Folder/mod.json",
         "mod_name": "CAT.EARS.Tech.Test.Pulse.Blade.Male"
       }
+    ],
+    "generated_models": [
+      "models/humans/pilots/pilot_medium_geist_m.mdl",
+      "models/humans/pilots/pilot_medium_reaper_m.mdl"
     ]
   }
 ]

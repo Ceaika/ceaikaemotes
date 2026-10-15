@@ -6,6 +6,7 @@
 | --- | --- |
 | `client/mods/ceaikaemotes` | mod metadata, Squirrel, wheel UI, models and paks |
 | `native/emote_visibility.cpp` | rendering, camera, lifetime checks and plugin callbacks |
+| `native/emote_models.h` | startup Cat Ears detection, model preparation and stock fallback |
 | `native/emote_auth.h` | fresh Origin code and HTTPS session exchange |
 | `relay/identity.py` | EA verification and expiring UID-bound sessions |
 | `native/emote_audio.h` | local WAV loading and mixer |
@@ -35,14 +36,17 @@ the build script compiles the DLL and runs the native tests. the package script 
 
 the source archive includes the supplied runtime assets so it can build the same client. importing a brand new animation still needs the original porting pipeline and source assets; that isn't recreated from a compiled MDL by these tools. when changing assets intentionally, update `assets/checksums.sha256` after checking the changes.
 
-`tools/emote_models.py` prepares an extracted v53 pilot MDL for dancing under a private path, preserving its geometry, materials, bones and existing animation includes. for example:
+`native/emote_models.h` prepares the four supported Grapple/Pulse model overrides in plugin `Init`, before Northstar indexes mod files. it reads enabled mods by descriptor name and version from the active profile, including manual and Thunderstore package installations. disabled or duplicate enabled versions use the pristine stock default. the four defaults under `client/mods/ceaikaemotes/pilot-defaults` must be shipped with the mod, outside its `mod` search path.
+
+Cat Ears source versions, URLs, hashes and raw MDL offsets are recorded in `assets/cat_ears_sources.json`. the supported VPK payloads contain uncompressed v53 models; Pulse includes a 223-byte pack log before its MDL. the native reader checks the supported source SHA-256, header, declared size and animation include offsets before preparing a copy. it inserts the dance include table and model name inside the studio metadata, before the packed PHY/VTX/VVD/VVC sections. those payloads move together with their header offsets and retain their original bytes and alignment. geometry, materials and bones are preserved, and the corresponding stock model path is written atomically. appending metadata after the packed payloads leaves it outside the cached studio section and can crash `datacache.dll`. the installed Cat Ears VPK is never changed.
+
+`tools/emote_models.py` validates the release inputs. packaging substitutes pristine defaults for the four generated stock paths, so locally installed Cat Ears meshes cannot enter an archive. the portable native model test can also run on Linux:
 
 ```sh
-python tools/emote_models.py /path/to/extracted/cat_ears_f.mdl client/mods/ceaikaemotes/mod/models/ceaikaemotes/pilots/cat_ears_f.mdl --name ceaikaemotes/pilots/cat_ears_f.mdl
-python -m unittest discover -s tools -p 'test_models.py' -v
+c++ -std=c++17 -I native native/tests/test_models.cpp -o /tmp/ceaika-test-models
+/tmp/ceaika-test-models
+python3 -m unittest discover -s tools -p 'test_models.py' -v
 ```
-
-Cat Ears source package versions, download URLs and hashes are recorded in `assets/cat_ears_sources.json`. extract the MDL from the listed VPK with a Titanfall VPK reader. the Pulse VPKs contain a pack log before the MDL; the model must be extracted as its own file. package validation rejects normal pilot overrides, missing private copies, wrong internal names and missing emote libraries.
 
 ## things worth testing
 
@@ -54,7 +58,7 @@ the actual checks and their limits for this build are in [verification.md](verif
 
 for an in-game check, try every wheel entry, stationary and traversal emotes, jump/attack cancellation, stopping while physically holding crouch, turning through 0/360 degrees, and looking away from another player then back. check another client sees the normal model return. test near/far and left/right music, then stop everything and check `em_status` goes idle with zero voices.
 
-for Cat Ears compatibility, enable each of the four Northstar_Archive packages in turn and check its male/female Grapple or Pulse pilot before, during and after every emote. repeat with Cat Ears disabled and with all four enabled. after changing enabled mods, reload the map so model selection and precaching run again. ensure an update removed the old `mod/models/humans/pilots` overrides.
+for Cat Ears compatibility, enable each of the four Northstar_Archive packages in turn and check its male/female Grapple or Pulse pilot before, during and after every emote. repeat with Cat Ears disabled and with all four enabled. restart Ion after changing enabled mods so startup preparation runs before model caching. `em_status` reports `pilotModels=4`, the number of active Cat Ears replacements and any preparation failures. verify the newly built DLL is installed alongside the complete mod folder, including `pilot-defaults`.
 
 one local client can catch compilation and local playback bugs. two clients are still needed to verify what a friend sees over the real relay. don't call a single-client test proof of every multiplayer edge case.
 
@@ -64,7 +68,7 @@ the compiled Titan libraries are included, so rebuilding the DLL and packages do
 
 the client and Thunderstore zips have root `manifest.json`, `README.md`, `CHANGELOG.md` and a 256x256 PNG icon, plus `mods` and `plugins`. the package icon is `icon.png` in the repository root.
 
-the Thunderstore team is chosen at upload time. the package uses `ceaikaemotes`, version `0.3.0`, and the GitHub URL `https://github.com/Ceaika/ceaikaemotes`. it deliberately doesn't declare a stock Northstar package dependency that might replace someone's Ion setup. the README explains the Ion requirement.
+the Thunderstore team is chosen at upload time. the package uses `ceaikaemotes`, version `0.4.0`, and the GitHub URL `https://github.com/Cratylel/ceaikaemotes`. it deliberately doesn't declare a stock Northstar package dependency that might replace someone's Ion setup. the README explains the Ion requirement.
 
 review the third party asset notes before publishing. the public shared-room key is intentionally bundled. never upload private-room keys, the test profile, raw player logs, personal autoexec or production Caddyfile. the source archive is a file snapshot; it doesn't include Git history or private credentials.
 

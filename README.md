@@ -66,7 +66,7 @@ to keep the overhead down, idle music closes its audio device and the DLL polls 
 
 some animations can look stepped even at high FPS, music doesn't get muffled by walls, and the dancing model doesn't change the server's hitbox. the DLL also depends on a supported engine build.
 
-Northstar_Archive's Cat Ears mods for male/female Grapple and Pulse pilots are detected automatically, with cat ears kept on the dancing copy. emote models use private paths, so normal pilot models are left to cosmetic mods. other custom pilot meshes use the standard dancing appearance. replace the entire old ceaikaemotes folder when updating to remove its old pilot overrides.
+Northstar_Archive's male/female Grapple and Pulse Cat Ears mods are detected by the DLL at startup. their models keep the ears during normal play and emotes. restart Ion after enabling or disabling one of these mods. when updating, replace both the DLL and the whole ceaikaemotes folder, including `pilot-defaults`. other mods replacing pilot or titan models can still conflict.
 
 The upstream Pulse Male 1.0.0 zip puts `mod.json` inside `Locked_Folder`. Move it to `mods/pulse_cat_ears_male`, alongside `vpk`, so Ion can load the Cat Ears mod.
 
@@ -74,14 +74,14 @@ The upstream Pulse Male 1.0.0 zip puts `mod.json` inside `Locked_Folder`. Move i
 
 these pages explain the setup, the engine limitations behind the design, and what's currently supported:
 
-- [compatibility and test coverage](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/verification.md)
-- [how it works, and why](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/how-it-works.md)
-- [titan retargeting](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/titans.md)
-- [asset tools and credits](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/asset-tools.md)
-- [building it and testing changes](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/development.md)
-- [hosting a relay](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/hosting.md)
-- [fixing common issues](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/troubleshooting.md)
-- [what the room key does and doesn't protect](https://github.com/Ceaika/ceaikaemotes/blob/main/SECURITY.md)
+- [compatibility and test coverage](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/verification.md)
+- [how it works, and why](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/how-it-works.md)
+- [titan retargeting](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/titans.md)
+- [asset tools and credits](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/asset-tools.md)
+- [building it and testing changes](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/development.md)
+- [hosting a relay](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/hosting.md)
+- [fixing common issues](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/troubleshooting.md)
+- [what the room key does and doesn't protect](https://github.com/Cratylel/ceaikaemotes/blob/main/SECURITY.md)
 
 ## was ai used
 
@@ -89,4 +89,4 @@ i've used codex to get rid of the time consuming parts, such as taking the alrea
 
 ## credits and code
 
-mod and integration by Ceaika. the animation pipeline uses FortnitePorting, UEFormat, SFM's studiomdl and mdlshit, with RePak for the wheel assets. [tools and credits](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/asset-tools.md) explains what each one does. development and debugging were AI assisted with OpenAI Codex. original code is MIT licensed, copyright Ceaika. the imported game models, animations and music are separate assets; the MIT license doesn't make those ours. see [third party notes](https://github.com/Ceaika/ceaikaemotes/blob/main/THIRD_PARTY_NOTICES.md).
+mod and integration by Ceaika. the animation pipeline uses FortnitePorting, UEFormat, SFM's studiomdl and mdlshit, with RePak for the wheel assets. [tools and credits](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/asset-tools.md) explains what each one does. development and debugging were AI assisted with OpenAI Codex. original code is MIT licensed, copyright Ceaika. the imported game models, animations and music are separate assets; the MIT license doesn't make those ours. see [third party notes](https://github.com/Cratylel/ceaikaemotes/blob/main/THIRD_PARTY_NOTICES.md).

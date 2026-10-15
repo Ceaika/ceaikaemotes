@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "emote_audio.h"
+#include "emote_models.h"
 
 using InterfaceFactory = void *(*)(const char *, int *);
 template <class F> F GetVirtualFunction(void *p, int i)
@@ -50,6 +51,7 @@ static void Log(const char *s)
 static void *entityList = nullptr, *consoleVariables = nullptr;
 static bool supportedClient = false;
 static ULONGLONG nextIdlePollTime = 0;
+static EmoteModels::Report preparedPilots;
 static bool attachmentsEnabled = false;
 static void *cameraInput = nullptr;
 static bool ownsThirdPerson = false;
@@ -345,6 +347,48 @@ static bool ParseRenderRequest(const char *raw, size_t n, int (&wanted)[128], in
     return true;
 }
 
+static void PreparePilotModels(HMODULE self)
+{
+    try
+    {
+        wchar_t path[32768];
+        const DWORD length = GetModuleFileNameW(self, path, static_cast<DWORD>(std::size(path)));
+        if (!length || length >= std::size(path))
+        {
+            Log("Cannot locate plugin for Cat Ears preparation; retaining shipped pilot defaults.");
+            return;
+        }
+        namespace fs = std::filesystem;
+        const fs::path package = fs::path(path).parent_path().parent_path();
+        const fs::path profile = _wcsicmp(package.parent_path().filename().c_str(), L"packages") == 0
+                                     ? package.parent_path().parent_path()
+                                     : package;
+        const auto own = EmoteModels::FindOwnMod(profile, package);
+        if (own.empty())
+        {
+            Log("Pilot defaults not found. Replace the entire ceaikaemotes mod and restart Ion.");
+            return;
+        }
+        // Northstar loads plugins before ModManager indexes loose overrides.
+        // Keep the stock paths/model indices used by the working renderer.
+        preparedPilots = EmoteModels::PrepareInstalledModels(profile, own, Log);
+        char summary[160];
+        snprintf(summary,
+                 sizeof(summary),
+                 "Pilot models prepared: %d/4, Cat Ears: %d, failures: %d. Restart Ion after changing Cat "
+                 "Ears mods.",
+                 preparedPilots.prepared,
+                 preparedPilots.catEars,
+                 preparedPilots.failed);
+        Log(summary);
+    }
+    catch (const std::exception &error)
+    {
+        ++preparedPilots.failed;
+        Log(error.what());
+    }
+}
+
 struct Plugin final : PluginCallbacks
 {
     void Init(HMODULE northstar, const NorthstarData *, bool) override
@@ -352,10 +396,13 @@ struct Plugin final : PluginCallbacks
         logger = static_cast<PluginLogger *>(GetEngineInterface(northstar, "NSSys001"));
         Log("Visibility helper loaded; waiting for supported client and emote heartbeat.");
         HMODULE self = nullptr;
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           reinterpret_cast<LPCWSTR>(&EmoteAudio::StartWorker),
-                           &self);
+        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               reinterpret_cast<LPCWSTR>(&EmoteAudio::StartWorker),
+                               &self))
+            PreparePilotModels(self);
+        else
+            Log("Cannot locate plugin module; retaining shipped pilot defaults.");
         Log(EmoteAudio::StartWorker(self) ? "Proximity music worker started."
                                           : "Music file missing or invalid; proximity music disabled.");
     }
@@ -410,6 +457,9 @@ struct Plugin final : PluginCallbacks
         if (!consoleVariables)
             consoleVariables = GetEngineInterface(GetModuleHandleA("vstdlib.dll"), "VEngineCvar007");
         SetDiagnosticValue("em_native_ready", supportedClient && entityList ? 1 : 0);
+        SetDiagnosticValue("em_models_ready", preparedPilots.prepared);
+        SetDiagnosticValue("em_models_cat_ears", preparedPilots.catEars);
+        SetDiagnosticValue("em_models_failed", preparedPilots.failed);
         SetDiagnosticValue("em_audio_ready", EmoteAudio::ready);
         SetDiagnosticValue("em_audio_voices", EmoteAudio::playing);
         SetDiagnosticValue("em_audio_idle", EmoteAudio::sleeping);

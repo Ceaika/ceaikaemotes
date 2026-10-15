@@ -14,7 +14,9 @@ make sure `plugins/ceaikaemotes/*.wav` is next to `plugins/ceaikaemotes.dll`. tr
 
 ## missing or invisible models
 
-restart Ion after replacing the DLL. don't have both old manual and package installs enabled. other mods replacing the same pilot or titan models can conflict with the animation libraries. replace the whole old ceaikaemotes folder when updating to remove its old pilot overrides. enable the matching Northstar_Archive Cat Ears mod and reload the map for its dancing copy to be selected. stop the emote and check whether `hidden` returns to zero before reproducing it.
+restart Ion after replacing the DLL. don't have both old manual and package installs enabled. other mods replacing the same pilot or titan models can conflict with the animation libraries. replace both the DLL and the complete ceaikaemotes folder when updating, including `pilot-defaults`. enable the matching Northstar_Archive Cat Ears mod and restart Ion; changing mods during a session does not regenerate cached models. stop the emote and check whether `hidden` returns to zero before reproducing it.
+
+`em_status` reports `pilotModels=4` after successful startup preparation. `catEars` is the number of selected Cat Ears variants, from zero to four. `modelFailures` and the plugin startup log identify missing defaults, unusable VPKs or write failures. a failed Cat Ears extraction uses the stock emote model.
 
 the upstream Cat Ears Pulse Male 1.0.0 zip has a misplaced descriptor. move `mods/pulse_cat_ears_male/Locked_Folder/mod.json` to `mods/pulse_cat_ears_male/mod.json`, next to its `vpk` folder. moving only `Locked_Folder` into your mods directory leaves the models behind.
 

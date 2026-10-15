@@ -1,6 +1,6 @@
 {
     "Name": "ceaikaemotes",
-    "Version": "0.3.0",
+    "Version": "0.4.0",
     "LoadPriority": 30,
     "RequiredOnClient": false,
     "Description": "experimental lol",
@@ -87,6 +87,18 @@
         },
         {
             "Name": "em_native_ready",
+            "DefaultValue": "0000"
+        },
+        {
+            "Name": "em_models_ready",
+            "DefaultValue": "0000"
+        },
+        {
+            "Name": "em_models_cat_ears",
+            "DefaultValue": "0000"
+        },
+        {
+            "Name": "em_models_failed",
             "DefaultValue": "0000"
         },
         {

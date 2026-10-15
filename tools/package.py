@@ -20,9 +20,19 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def release_source(path):
+    """Never redistribute a cosmetic model generated in a local installation."""
+    mod = ROOT / "client/mods/ceaikaemotes"
+    if path.parent == mod / "mod/models/humans/pilots":
+        default = mod / "pilot-defaults" / path.name
+        if default.is_file():
+            return default
+    return path
+
+
 def release_files(folder):
     for path in sorted(folder.rglob("*")):
-        if path.is_file() and "__pycache__" not in path.parts:
+        if path.is_file() and "__pycache__" not in path.parts and not path.name.endswith(".ceaika.tmp"):
             yield path
 
 
@@ -33,7 +43,7 @@ def validate():
     assert mod["Version"] == VERSION
     assert re.fullmatch(r"\d+\.\d+\.\d+", VERSION)
     assert len(manifest["description"]) <= 250
-    assert manifest["website_url"] == "https://github.com/Ceaika/ceaikaemotes"
+    assert manifest["website_url"] == "https://github.com/Cratylel/ceaikaemotes"
     convars = {item["Name"]: item["DefaultValue"] for item in mod["ConVars"]}
     assert re.fullmatch(r"[a-zA-Z0-9_-]{24,128}", convars["emkey"])
     assert convars["em_enabled"] == "1"
@@ -84,7 +94,7 @@ def validate():
             assert audio.getnframes() > 0
     for line in (ROOT / "assets/checksums.sha256").read_text().splitlines():
         expected, relative = line.split("  ", 1)
-        assert digest(ROOT / relative) == expected, f"Asset changed: {relative}"
+        assert digest(release_source(ROOT / relative)) == expected, f"Asset changed: {relative}"
 
     titans = json.loads((ROOT / "assets/titans.json").read_text())
     validation = json.loads((ROOT / "assets/titan-validation.json").read_text())[
@@ -126,7 +136,7 @@ def archive(name, entries):
             info = zipfile.ZipInfo(relative, (2026, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
-            output.writestr(info, path.read_bytes(), compresslevel=9)
+            output.writestr(info, release_source(path).read_bytes(), compresslevel=9)
     with zipfile.ZipFile(destination) as output:
         assert output.testzip() is None
     destination.with_suffix(destination.suffix + ".sha256").write_text(

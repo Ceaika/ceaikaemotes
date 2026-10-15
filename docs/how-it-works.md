@@ -30,7 +30,7 @@ the room key only permits an authentication attempt. it isn't the session token.
 
 the game normally controls a networked pilot's animation. directly assigning a dance isn't reliable because those normal updates can overwrite it. client script visibility controls also aren't enough to consistently hide that pilot.
 
-`CeaikaEmotes_UpdateDancers` handles this by creating a clientside animated copy. it selects a private dancing model for the pilot and copies the pilot's skin, camo, bodygroups and team, while the DLL hides the original model and its attached weapons locally. copying the team preserves the matching coloured lights.
+`CeaikaEmotes_UpdateDancers` handles this by creating a clientside animated copy. it uses the player's stock model path and copies the pilot's skin, camo, bodygroups and team, while the DLL hides the original model and its attached weapons locally. copying the team preserves the matching coloured lights.
 
 the original player still exists and keeps its normal collision and hitbox. the dancing copy is visual only, so its pose isn't a new hitbox you can shoot.
 
@@ -82,7 +82,11 @@ remote animated copies are skipped outside a conservative camera-frustum boundar
 
 pilot and titan models are shared across the emote catalog, with separate animation libraries for the dances. this avoids bundling a complete set of pilot models for every emote. source animation quality isn't reduced to make that saving.
 
-the dancing models live under `models/ceaikaemotes/pilots`, with matching private names inside their MDL headers. they don't override the normal `models/humans/pilots` paths. `CeaikaEmotes_ModelsInit` checks enabled mods once per map and selects the matching Cat Ears copy for Northstar_Archive's male/female Grapple and Pulse packages before precaching. their Grapple and Pulse meshes are identical for each sex, so the two Cat Ears dancing copies serve all four packages. other model replacements keep their normal appearance outside emotes, but their custom meshes aren't copied into the dancing assets.
+pilot copies retain their stock `models/humans/pilots` paths. private aliases could not reliably obtain model indices on stock servers. before Northstar scans mod overrides, the DLL reads the active profile's `enabledmods.json` and installed mod descriptors. for enabled Northstar_Archive Cat Ears Grapple/Pulse mods, it extracts the installed v53 MDL and adds the catalog's animation includes at the corresponding stock path. mesh, material and bone data retain their original bytes and offsets. the same model serves ordinary play and the dancing copy.
+
+the four original Grapple/Pulse emote models are retained in `pilot-defaults`, outside the engine's `mod` search path. each launch starts from these pristine copies, so disabling Cat Ears restores the stock models. writes replace files atomically before model loading. a missing or unsupported VPK falls back to the default and produces a diagnostic. enabled-mod changes need a full Ion restart; the plugin does not try to hot-reload a VPK or an already cached model.
+
+release packaging always uses the pristine defaults for those four stock paths, even when run from an installation with generated Cat Ears models. the local Cat Ears meshes never enter a release archive.
 
 the client and UI wheel scripts use `sh_ceaikaemotes_catalog.nut`: eight sectors per page, two pages. selecting an entry passes its catalog ID to the normal play command, so the wheel and console use the same relay path. orange justice uses `emote_oj`, with `oj` and `orangejustice` aliases.
 

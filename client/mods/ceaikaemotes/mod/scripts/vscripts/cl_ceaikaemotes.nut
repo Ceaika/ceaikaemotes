@@ -63,7 +63,6 @@ string function CeaikaEmotes_PlayerUID(entity player)
 
 void function CeaikaEmotes_Init()
 {
-    CeaikaEmotes_ModelsInit()
     AddDestroyCallback("player", void function(entity player)
     {
         if(player in relay.playerUIDs) delete relay.playerUIDs[player]
@@ -238,6 +237,7 @@ void function CeaikaEmotes_Status(array<string> args = [])
     print("[EmoteRelay] authState="+GetConVarInt("em_auth_state")+" sessionReady="+(relay.sessionToken != ""))
     print("[EmoteRelay] idle="+relay.drawIdle+" audioSleeping="+GetConVarInt("em_audio_idle")+" audioDeviceOpen="+GetConVarInt("em_audio_device"))
     print("[EmoteRelay] audioReady="+GetConVarInt("em_audio_ready")+" voices="+GetConVarInt("em_audio_voices"))
+    print("[EmoteRelay] pilotModels="+GetConVarInt("em_models_ready")+" catEars="+GetConVarInt("em_models_cat_ears")+" modelFailures="+GetConVarInt("em_models_failed"))
     print("[EmoteRelay] enabled="+GetConVarBool("em_enabled")+" HTTP="+NSIsHttpEnabled()+" peers="+relay.peers.len()+" visuals="+relay.dancers.len()+" culled="+relay.culled+" native="+GetConVarInt("em_native_ready")+" hidden="+GetConVarInt("em_native_hidden")+" replyAge="+(Time()-relay.lastReplyTime))
     print("[EmoteRelay] uidCached="+relay.playerUIDs.len()+" uidReads="+relay.uidReads)
     if(IsValid(player)) print("[EmoteRelay] Local player UID available="+(CeaikaEmotes_PlayerUID(player) != ""))

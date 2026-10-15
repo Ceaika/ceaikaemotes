@@ -1,5 +1,19 @@
 # release notes
 
+## 0.4.0
+
+- support installed Cat Ears pilot models while keeping emote animation playback on the stock pilot model paths.
+- prepare Cat Ears model metadata in the cached studio section to avoid a multiplayer model-loader crash.
+- restore stock pilot models when supported Cat Ears mods are disabled.
+
+## 0.3.1
+
+- restored stock pilot paths so emote models use the same model indices as main.
+- the DLL prepares enabled Cat Ears pilot models from their installed VPKs at startup, with the same dance animation includes as the stock pilots.
+- fixed generated Cat Ears metadata being placed outside the cached studio section, which could crash the model loader when entering multiplayer.
+- Cat Ears meshes are no longer bundled. disabling a supported mod restores the stock model on the next Ion launch.
+- install the updated DLL and complete mod folder; restart Ion after changing Cat Ears mods.
+
 ## 0.3.0
 
 - scroll the mouse wheel to change emote pages. the bottom help text is gone.
@@ -11,15 +25,7 @@
 - in-game permission prompt with a remembered relay address. login and renewal run automatically afterwards.
 - cached player UIDs so Ion builds with noisy UID logging don't repeat it every animation frame.
 
-**relay hosts:** update the backend before publishing the client. 0.3.0 requires verified sessions, and older clients can't sync with the new backend. see [hosting](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/hosting.md).
-
-## unreleased
-
-- moved dancing models to private paths to avoid replacing cosmetic pilot models.
-- automatically select Cat Ears dancing copies for Northstar_Archive's male/female Grapple and Pulse mods, retaining their ears during emotes.
-- added model asset checks and a reproducible tool for preparing private dancing copies.
-- updating requires replacing the old mod folder to remove its pilot model overrides.
-
+**relay hosts:** update the backend before publishing the client. 0.3.0 requires verified sessions, and older clients can't sync with the new backend. see [hosting](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/hosting.md).
 
 ## 0.2.1
 
@@ -30,4 +36,4 @@
 - local third person view and hidden attached weapons while emoting.
 - offscreen animation culling and idle processing that sleeps when not needed.
 
-see [compatibility and limitations](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/verification.md) before installing, and [how it works](https://github.com/Ceaika/ceaikaemotes/blob/main/docs/how-it-works.md) for the implementation details.
+see [compatibility and limitations](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/verification.md) before installing, and [how it works](https://github.com/Cratylel/ceaikaemotes/blob/main/docs/how-it-works.md) for the implementation details.
