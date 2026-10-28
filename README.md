@@ -2,7 +2,7 @@
 
 ok so basically this lets you emote with other people who have the mod, without needing the game server to install it. there's 33 emotes for pilots and titans, two of them paired so a friend can dance with you, props like a sax and a trombone, the wheel from party pack, music that gets quieter as you walk away, and a few emotes you can walk around with.
 
-this is experimental lol. **you need Northstar (or Ion) on Windows and the included DLL.** this isn't a mod that makes everyone on a vanilla client see you dancing. they need ceaikaemotes too, with the same relay and room key. the server doesn't need anything, it works on normal vanilla servers.
+this is experimental lol. **you need the Ion Client and the included DLL.** this isn't a mod that makes everyone on a vanilla client see you dancing. they need ceaikaemotes too, with the same relay and room key. the server doesn't need anything, it works on normal vanilla servers.
 
 ## installing it
 
