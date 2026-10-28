@@ -87,7 +87,7 @@ music doesn't get muffled by walls, and the dancing model doesn't change the ser
 
 ## was ai used
 
-i've used codex to get rid of the time consuming parts, such as taking the already built emotes and wheel from my partypack mod i was making, and putting them inside the standalone version; i've also used it to build the mixer. the 0.5 updates (new emotes, props, pairing, making it smaller) were done with claude code.
+i've used codex to get rid of the time consuming parts, such as taking the already built emotes and wheel from my partypack mod i was making, and putting them inside the standalone version; i've also used it to build the mixer and to optimize file size in 5.5
 
 ## credits and code
 
