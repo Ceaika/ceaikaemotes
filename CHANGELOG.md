@@ -1,3 +1,9 @@
+# 0.5.6
+
+- fixed vanilla animations on medium titans (Ion, Tone, Monarch, Ion Prime, Tone Prime) on vanilla servers. embarks, executions, titanfall, melee and reactions could play the wrong animation. the dances got slotted in front of those animations, and the server picks animations by number, so all of them were shifted. they come after every vanilla animation now.
+- **delete the old mod folder before installing.** the broken 0.5.5 file (`models/titans/medium/titan_medium_mp_core.mdl`) keeps the bug if it's left behind.
+- relay: no changes, 0.5.1 is still the right one.
+
 # 0.5.5
 
 - way smaller: about 188 MB installed instead of about 410 MB. the client zip went from 343 MB to 99 MB.
@@ -53,7 +59,7 @@
 # 0.3.1
 
 - Restore UID-only sync with the shared room key. UIDs are unverified.
-- Remove EA authorization requests, relay verification, session tokens and login prompts.
+- Removed EA authorization requests, relay verification, session tokens and login prompts.
 - Update the relay alongside the client; the 0.3.0 session protocol is incompatible.
 
 # release notes

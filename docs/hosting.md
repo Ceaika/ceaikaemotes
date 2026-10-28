@@ -4,7 +4,7 @@ the client comes configured for the public relay, so normal players don't need t
 
 ## updating a legacy relay install
 
-**the current relay is 0.5.1, and it's the one for every 0.5.x client up to 0.5.5.** it knows all the emotes, the paired ones (Last Forever, Hug) and the locked facing for freelook. an older relay answers the new emotes with HTTP 400, so update the relay before handing out a new client. laugh and the worm stay on its allowlist so older clients don't get errors. clients from 0.3.0 that use EA sessions don't work with it.
+**the current relay is 0.5.1, and it's the one for every 0.5.x client up to 0.5.6.** it knows all the emotes, the paired ones (Last Forever, Hug) and the locked facing for freelook. an older relay answers the new emotes with HTTP 400, so update the relay before handing out a new client. laugh and the worm stay on its allowlist so older clients don't get errors. clients from 0.3.0 that use EA sessions don't work with it.
 
 there's no EA login, outbound Stryder verification or session storage. the relay accepts the UID in each sync request, see [SECURITY.md](../SECURITY.md).
 

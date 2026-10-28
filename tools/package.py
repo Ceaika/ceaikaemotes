@@ -99,6 +99,11 @@ def validate():
         assert (models / "emotes" / ident / "anim.mdl").is_file(), ident
     for chassis in ("ion", "northstar", "scorch"):
         assert (models / "emotes/titans" / f"{chassis}.mdl").is_file(), chassis
+    # the medium titan dances have to hang off their LAST include. on mp_core
+    # (0.5.5) they shifted every vanilla anim number after it and the server
+    # picks anims by number, so embarks and executions played the wrong thing
+    medium = models / "titans/medium"
+    assert sorted(p.name for p in medium.iterdir()) == ["titan_medium_anims_workspace.mdl"]
     for name in music_names():
         check_music(name)
 

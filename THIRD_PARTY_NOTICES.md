@@ -8,7 +8,7 @@ the emote catalog includes alors on dance, billy bounce, boogie down, breakin', 
 
 these include emotes associated with Fortnite/Epic Games and music that can have separate rights holders. the local asset exports do not establish complete upstream authorship or redistribution permissions for each track. don't read their inclusion as a claim that Ceaika wrote the songs or owns the original dances. credits alone aren't a redistribution license.
 
-complete track-by-track attribution and permission records are not included in this repository. redistribution of these assets requires checking their original sources and terms. `sh_ceaikaemotes_catalog.nut` records the exact emotes and sequences used, and `assets/checksums.sha256` identifies the supplied music and models. the code can be reviewed and shared separately from these assets.
+complete track-by-track attribution and permission records are not included in this repository. redistribution of these assets requires checking their original sources and terms. `sh_ceaikaemotes_catalog.nut` records the exact emotes and sequences used. the code can be reviewed and shared separately from these assets.
 
 the wheel integration and emote ports are by Ceaika. asset conversion uses FortnitePorting and UEFormat (h4lfheart and contributors), Source Filmmaker's studiomdl (Valve), and mdlshit (headassbtw, MasterLiberty and contributors). RePak (r-ex and contributors) packages the wheel assets. Blender and Rokoko were used for the initial titan alignment; Python/NumPy handled the batch retargeting. Blender is also used for previews, and Crowbar's v53 layout is a format reference.
 

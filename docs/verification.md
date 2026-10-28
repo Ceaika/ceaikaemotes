@@ -8,6 +8,12 @@ the DLL depends on a checked engine layout. Linux/Wine and future game builds ar
 
 relay timing isn't frame-perfect. UIDs aren't verified, so the relay can't prove who anyone is or which match they're in. the relay holds 32 room entries and the mixer has 16 voices. see [security](../SECURITY.md).
 
+## 0.5.6, 2026-10-28
+
+- the medium titan dances moved from `titan_medium_mp_core.mdl` (first of 9 includes) to `titan_medium_anims_workspace.mdl` (last of 9). the new file is the stock one plus one include at the end, its own 24 sequences unchanged.
+- in-game self-test: 0 missing, 0 failures, poses match the 0.5.5 run within frame timing noise on every model.
+- not checked yet: embark, executions and titanfall as a medium titan in a real match on a vanilla server.
+
 ## 0.5.5, 2026-10-28
 
 what was checked:
