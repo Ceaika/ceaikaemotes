@@ -2,22 +2,34 @@
 
 ## current limits
 
-both players need a supported Windows Ion client, matching ceaikaemotes files and the same relay room. people without the mod see the normal player. the game server keeps control of movement and hitboxes.
+both players need a Windows Northstar/Ion client, matching ceaikaemotes files and the same relay room. people without the mod see the normal player. the game server keeps control of movement and hitboxes.
 
-the DLL depends on a checked engine layout. Linux/Wine and arbitrary future builds aren't verified. other mods replacing the same pilot or titan models can conflict. some dances look stepped even at high FPS, and titan poses can have clipping or foot sliding. music fades with distance but isn't muffled by walls.
+the DLL depends on a checked engine layout. Linux/Wine and future game builds aren't verified. other mods replacing the same pilot or titan models will conflict. titan poses can have clipping or foot sliding. music fades with distance but isn't muffled by walls. Windows "N" editions need the Media Feature Pack for music.
 
-relay timing isn't frame-perfect. identity verification doesn't prove match membership or that someone is honest about their own emote. the supplied relay has 32 room entries and the mixer has 16 voices. see [security](../SECURITY.md).
+relay timing isn't frame-perfect. UIDs aren't verified, so the relay can't prove who anyone is or which match they're in. the relay holds 32 room entries and the mixer has 16 voices. see [security](../SECURITY.md).
 
-## checked before packaging
+## 0.5.5, 2026-10-28
 
-native tests cover visibility restoration, reused handles, attachments, camera state, stale requests and idle processing. audio tests cover phase, panning, supported sample rates and closing/reopening the Windows device. authentication checks cover consent gating, URL restrictions, callback errors and clearing sessions.
+what was checked:
 
-relay tests cover catalog/traversal restrictions, replay and expiry, rejection of UID overrides, malformed requests, capacity and request limits. packaging checks validate versions, icon dimensions, catalog/audio mappings, model hashes, archive paths and ZIP integrity.
+- in-game self-test on a local map: every emote's sequence exists on pilots and titans (0 missing, 0 failures), the poses match the uncompressed clips within about 2 units, all 70 prop clips play with the prop at the right spot, no script errors.
+- pumpernickel looked off in the full self-test. a 21-point scan of the old and new clip matched, it just moves so fast that one frame of timing looks huge.
+- the DLL loaded all 40 tracks with 0 failures. every m4a decodes back to the exact original length with no offset, so loops stay on beat.
+- native tests (visibility, audio, idle audio, m4a), 14 porter tests including one for the titan rotation scale, 24 relay tests and the package checks pass.
 
-all 208 titan/emote combinations loaded in an isolated Ion client on a local Northstar server with `sv_cheats 0`. after correcting atlas mechanical bones and prime grounding, the affected seven rigs passed another 112 playback checks. stopping returned hidden entities and animated copies to zero. northstar orange justice and the corrected atlas hands/cockpit were also visually reviewed.
+what wasn't checked yet:
 
-real titan melee input was checked with orange justice and traversal griddy. both stopped and restored the model, music, forced crouch and camera without script errors.
+- listening to the m4a music in game.
+- the props hiding their pieces at the right time by eye. the self-test can't see bone scale, but the titan prop frames are byte for byte the chassis clips they point at.
+- the A-Z wheel, remembered page and freelook invert by eye (the code is there).
+- Windows N editions.
 
-a real EA-code exchange passed against the HTTPS preview relay. the single-client checks rejected a forged sync UID, invalid session, public key used as a session and fake EA code. a separate native probe requested a fresh code for the real account but submitted it with a different dummy UID; that was rejected with HTTP 401. these checks don't require another player and don't expose raw credentials.
+the relay is unchanged since 0.5.1 and the live one reports 0.5.1.
 
-the in-game relay prompt was accepted and wheel playback confirmed without console commands. remembered permission also authenticated automatically on a subsequent isolated-client launch. mouse-wheel page switching and removal of the bottom help text were checked in-game too.
+## 0.5.0 - 0.5.4
+
+these were tested in real matches over the live relay, which is where most of their fixes came from: joining by distance, Last Forever and Hug pairs, props on other players, shared music after the leader stops, and the camera. the 0.5.0 relay update added the new emote IDs and pairing rules; without it the new emotes got HTTP 400.
+
+## older notes
+
+0.4.0 added joining another player's timing; 0.3.1 removed the EA account verification that 0.3.0 had. in 0.3.0 all 208 titan/emote combinations loaded on a local Northstar server with `sv_cheats 0`, and titan melee was checked to stop the dance and restore the model, music, crouch and camera.

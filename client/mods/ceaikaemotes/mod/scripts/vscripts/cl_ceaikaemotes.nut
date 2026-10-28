@@ -1,25 +1,25 @@
 untyped
-global function CeaikaEmotes_AuthAccept
-global function CeaikaEmotes_AuthRevoke
+global function CeaikaEmotes_GetSyncTarget
+global function CeaikaEmotes_Sync
 global function CeaikaEmotes_Init
 global function CeaikaEmotes_Play
 global function CeaikaEmotes_Stop
 global function CeaikaEmotes_Status
 global function CeaikaEmotes_Probe
 global function CeaikaEmotes_List
+global function CeaikaEmotes_PropDebug
+global function CeaikaEmotes_PairTest
+global function CeaikaEmotes_IsEmoting
 struct
 {
-    string sessionToken = ""
-    string sessionUid = ""
-    string sessionUrl = ""
-    float sessionExpires = 0.0
-    float nextAuthAttempt = 0.0
-    int authSerial = 0
-    bool authPending = false
-    bool consentNotice = false
+    array<entity> debugProps
     bool requestInFlight = false
+    string requestNonce = ""
     bool started = false
     string emote = ""
+    string syncUid = ""
+    string syncNonce = ""
+    float syncStartedAt = 0.0
     string nonce = "idle"
     int serial = 0
     float lastReplyTime = -100.0
@@ -32,9 +32,20 @@ struct
     int uidReads = 0
     table playerUIDs
     table peers
+    table clocks
     table retryAfter
     table cancelledPlayback
     table dancers
+    // our dancer's facing while it's locked (freelook, joined pair); shared
+    // through the relay so other players see it hold still too
+    bool yawLocked = false
+    float lockedYaw = 0.0
+    bool requestHadYaw = false
+    bool noYaw = false // the relay predates the yaw field
+    // em_pairtest: a local stand-in partner for testing paired emotes alone
+    string pairTestEmote = ""
+    float pairTestStart = 0.0
+    entity pairTestModel
 } relay
 
 string function CeaikaEmotes_PlayerUID(entity player)
@@ -68,6 +79,15 @@ void function CeaikaEmotes_Init()
         if(player in relay.playerUIDs) delete relay.playerUIDs[player]
     })
     foreach (asset nativeModel, asset model in CeaikaEmotes_Models()) PrecacheModel(model)
+    foreach (CeaikaEmoteDef emoteDef in CeaikaEmotes_Catalog())
+    {
+        foreach (CeaikaEmoteExtra extra in emoteDef.extras)
+        {
+            if (extra.model != $"") PrecacheModel(extra.model)
+            if (extra.fx != $"") PrecacheParticleSystem(extra.fx)
+        }
+    }
+    foreach (string variant, asset model in CeaikaEmotes_DebugProps()) PrecacheModel(model)
     SetConVarString("em_native_request", "")
     SetConVarString("em_audio_request", "")
     SetConVarString("em_camera_request", "0")
@@ -75,90 +95,6 @@ void function CeaikaEmotes_Init()
     {
         thread CeaikaEmotes_PollRelay()
     })
-}
-
-void function CeaikaEmotes_AuthAccept(array<string> args = [])
-{
-    string url = GetConVarString("em_url")
-    if(url.find("https://") != 0)
-    {
-        print("[EmoteRelay] Account verification requires an HTTPS relay.")
-        return
-    }
-    SetConVarString("em_auth_allowed_url", url)
-    SetConVarBool("em_enabled", true)
-    relay.nextAuthAttempt = 0.0
-    print("[EmoteRelay] Allowed EA account verification at "+url+". Use em_auth_revoke to withdraw permission.")
-}
-void function CeaikaEmotes_AuthRevoke(array<string> args = [])
-{
-    SetConVarString("em_auth_allowed_url", "")
-    SetConVarString("em_auth_request", "")
-    relay.sessionToken = ""
-    relay.authPending = false
-    relay.consentNotice = false
-    SetConVarBool("em_enabled", false)
-    CeaikaEmotes_Stop()
-    relay.peers.clear()
-    print("[EmoteRelay] Verification permission removed; online emote syncing stopped.")
-}
-bool function CeaikaEmotes_EnsureSession(string uid, string url)
-{
-    if(GetConVarString("em_auth_allowed_url") != url || url.find("https://") != 0)
-    {
-        SetConVarString("em_auth_request", "")
-        relay.sessionToken = ""
-        relay.authPending = false
-        relay.peers.clear()
-        if(!relay.consentNotice)
-        {
-            print("[EmoteRelay] To verify your identity, this mod sends a fresh EA authentication code to "+url+".")
-            print("[EmoteRelay] Only approve a relay you trust. It verifies the code with Respawn and issues an emote-only session.")
-            print("[EmoteRelay] Accept the in-game prompt or use Mod Settings > ceaikaemotes > Online emotes. Nothing is sent before you allow it.")
-            relay.consentNotice = true
-        }
-        return false
-    }
-    if(relay.sessionUid != uid || relay.sessionUrl != url)
-    {
-        relay.sessionToken = ""
-        relay.authPending = false
-        relay.nextAuthAttempt = 0.0
-        relay.sessionUid = uid
-        relay.sessionUrl = url
-    }
-    if(relay.sessionToken != "" && Time()<relay.sessionExpires) return true
-    int state = GetConVarInt("em_auth_state")
-    if(relay.authPending)
-    {
-        if(state == 2)
-        {
-            string token = GetConVarString("em_auth_session")
-            if(token.len() == 64)
-            {
-                relay.sessionToken = token
-                relay.sessionExpires = Time()+1740.0
-                relay.authPending = false
-                print("[EmoteRelay] EA account verified; emote session ready.")
-                return true
-            }
-        }
-        else if(state >= 3)
-        {
-            relay.authPending = false
-            relay.nextAuthAttempt = Time()+60.0
-            CeaikaEmotes_Error("Account verification failed (stage "+state+"). No fallback to unverified identity.")
-        }
-        return false
-    }
-    if(Time()<relay.nextAuthAttempt) return false
-    relay.authSerial++
-    // clear the last result before asking again.
-    SetConVarInt("em_auth_state", 0)
-    SetConVarString("em_auth_request", uid+":"+int(Time()*1000)+":"+relay.authSerial)
-    relay.authPending = true
-    relay.nextAuthAttempt = Time()+60.0
-    return false
 }
 
 void function CeaikaEmotes_Play(array<string> args = [])
@@ -183,15 +119,21 @@ void function CeaikaEmotes_Play(array<string> args = [])
         return;
     }
     CeaikaEmoteDef emoteDef = CeaikaEmotes_Catalog()[index]
+    // a partner part only plays by joining someone (hold the sync key on them)
+    if(!emoteDef.listed && args.find("join") < 0)
+    {
+        print("[EmoteRelay] "+emoteDef.title+" is played by joining someone doing its partner emote.")
+        return
+    }
     if(!CeaikaEmotes_SupportsEmote(player, emoteDef.id))
     {
-        print("[EmoteRelay] This Titan model does not have an emote rig.")
+        print("[EmoteRelay] This Titan can't play "+emoteDef.title+" yet.")
         return
     }
     bool traversal = args.len()>1 && args[1] == "traversal"
     if(traversal && !emoteDef.traversal)
     {
-        print("[EmoteRelay] Traversal is available only for Billy Bounce and Griddy.");
+        print("[EmoteRelay] "+emoteDef.title+" has no traversal version.");
         return;
     }
     CeaikaEmotes_Stop()
@@ -208,9 +150,82 @@ void function CeaikaEmotes_Play(array<string> args = [])
     print("[EmoteRelay] "+relay.emote+" requested; traversal="+relay.traversal)
 }
 
+// em_propdebug <part>|off [static]
+// em_propdebug all [copies]
+// spawns props in front of u to look at, no relay needed. parts come from the
+// sequence names, prop_<part>_<emote id> (red, bluea, blueb, sax...). "all"
+// spawns every part a few times over (3 by default, 8 max) side by side and
+// out of sync, cus a bunch of copies at once is what crashed the renderer
+void function CeaikaEmotes_PropDebug(array<string> args = [])
+{
+    foreach(entity old in relay.debugProps) if(IsValid(old)) old.Destroy()
+    relay.debugProps.clear()
+    string variant = args.len() > 0 ? args[0] : "red"
+    if(variant == "off") return
+    table props = {}
+    foreach(CeaikaEmoteDef emoteDef in CeaikaEmotes_Catalog())
+        foreach(CeaikaEmoteExtra extra in emoteDef.extras)
+            if(extra.model != $"" && extra.sequence.find("prop_") == 0)
+                props[extra.sequence.slice(5, extra.sequence.len()-emoteDef.id.len()-1)] <- [extra.model, extra.sequence]
+    entity player = GetLocalClientPlayer()
+    if((variant != "all" && !(variant in props)) || !IsValid(player))
+    {
+        string names = ""
+        foreach(part, entry in props) names += part + "|"
+        print("[EmoteRelay] em_propdebug " + names + "off [static], or em_propdebug all [copies]")
+        return
+    }
+    array<string> parts = [variant]
+    int copies = 1
+    if(variant == "all")
+    {
+        parts.clear()
+        foreach(part, entry in props) parts.append(expect string(part))
+        copies = 3
+        if(args.len() > 1)
+        {
+            try { copies = args[1].tointeger() } catch(error) {}
+        }
+        copies = copies < 1 ? 1 : (copies > 8 ? 8 : copies)
+    }
+    bool animate = !(args.len() > 1 && args[1] == "static")
+    float yaw = player.EyeAngles().y
+    vector forward = AnglesToForward(<0, yaw, 0>)
+    vector right = AnglesToRight(<0, yaw, 0>)
+    int created = 0
+    for(int copy = 0; copy < copies; copy++)
+    {
+        vector origin = player.GetOrigin()+forward*160+right*(float(copy)-float(copies-1)*0.5)*90
+        foreach(string part in parts)
+        {
+            entity prop = CreateClientSidePropDynamic(origin, <0, yaw+180, 0>, expect asset(props[part][0]))
+            if(!IsValid(prop))
+            {
+                // only the server can precache models, so a path it doesnt know just fails
+                print("[EmoteRelay] "+part+" not created: the server has not precached its model path.")
+                continue
+            }
+            relay.debugProps.append(prop)
+            created++
+            string sequence = expect string(props[part][1])
+            // a model that failed to load has no sequences, -1 here
+            int index = prop.LookupSequence(sequence)
+            if(copies == 1)
+                print("[EmoteRelay] debug prop "+part+": entity=true model="+string(prop.GetModelName())+" sequence="+index)
+            if(index >= 0 && animate)
+            {
+                prop.Anim_Play(sequence)
+                prop.Anim_SetStartTime(Time()-float(copy)*1.3)
+            }
+        }
+    }
+    if(copies > 1)
+        print("[EmoteRelay] debug props: "+created+" models, "+copies+" sets of "+parts.len()+" parts")
+}
+
 void function CeaikaEmotes_List(array<string> args = [])
 {
-    foreach(emoteDef in CeaikaEmotes_Catalog())
+    foreach(emoteDef in CeaikaEmotes_Listed())
     print("[EmoteRelay] "+emoteDef.title+": em_play "+emoteDef.id+(emoteDef.traversal ? " [traversal]" : ""))
 }
 
@@ -219,8 +234,16 @@ void function CeaikaEmotes_Stop(array<string> args = [])
     CeaikaEmotes_ReleaseDuck()
     relay.traversal = false
     relay.emote = ""
+    relay.syncUid = ""
+    relay.syncNonce = ""
+    relay.syncStartedAt = 0.0
     relay.serial++
     relay.nonce = format("stop_%d", relay.serial)
+}
+
+bool function CeaikaEmotes_IsEmoting()
+{
+    return relay.emote != ""
 }
 
 void function CeaikaEmotes_ReleaseDuck()
@@ -234,7 +257,7 @@ void function CeaikaEmotes_ReleaseDuck()
 void function CeaikaEmotes_Status(array<string> args = [])
 {
     entity player = GetLocalClientPlayer()
-    print("[EmoteRelay] authState="+GetConVarInt("em_auth_state")+" sessionReady="+(relay.sessionToken != ""))
+    print("[EmoteRelay] identity=unverified UID")
     print("[EmoteRelay] idle="+relay.drawIdle+" audioSleeping="+GetConVarInt("em_audio_idle")+" audioDeviceOpen="+GetConVarInt("em_audio_device"))
     print("[EmoteRelay] audioReady="+GetConVarInt("em_audio_ready")+" voices="+GetConVarInt("em_audio_voices"))
     print("[EmoteRelay] enabled="+GetConVarBool("em_enabled")+" HTTP="+NSIsHttpEnabled()+" peers="+relay.peers.len()+" visuals="+relay.dancers.len()+" culled="+relay.culled+" native="+GetConVarInt("em_native_ready")+" hidden="+GetConVarInt("em_native_hidden")+" replyAge="+(Time()-relay.lastReplyTime))
@@ -271,7 +294,7 @@ void function CeaikaEmotes_PollRelay()
             if(url != "" && key != "" && GetMapName().find("mp_") == 0)
             {
                 string playerId = CeaikaEmotes_PlayerUID(player)
-                if(playerId != "0" && playerId != "" && CeaikaEmotes_EnsureSession(playerId, url))
+                if(playerId != "0" && playerId != "")
                 {
                     if(!IsAlive(player)) CeaikaEmotes_Stop()
                     HttpRequest request
@@ -279,14 +302,22 @@ void function CeaikaEmotes_PollRelay()
                     request.url = url+"/sync"
                     request.headers =
                     {
-                        Authorization = ["Bearer "+relay.sessionToken]
+                        Authorization = ["Bearer "+key]
                     }
-                    request.body = EncodeJSON(
+                    table payload = {
+                        uid = playerId, map = GetMapName(), emote = relay.emote, nonce = relay.nonce, traversal = relay.traversal
+                    }
+                    if(relay.syncUid != "")
                     {
-                        map = GetMapName(), emote = relay.emote, nonce = relay.nonce, traversal = relay.traversal
-                    })
+                        payload.sync_uid <- relay.syncUid
+                        payload.sync_nonce <- relay.syncNonce
+                    }
+                    relay.requestHadYaw = relay.emote != "" && relay.yawLocked && !relay.noYaw
+                    if(relay.requestHadYaw) payload.yaw <- relay.lockedYaw
+                    request.body = EncodeJSON(payload)
                     request.timeout = 4
                     relay.requestInFlight = true
+                    relay.requestNonce = relay.nonce
                     if(!NSHttpRequest(request, CeaikaEmotes_OnRelayReply, CeaikaEmotes_OnRelayFailure)) relay.requestInFlight = false
                 }
             }
@@ -313,10 +344,17 @@ void function CeaikaEmotes_OnRelayReply(HttpRequestResponse result)
     relay.requestInFlight = false
     if(result.statusCode != 200)
     {
-        if(result.statusCode == 401)
+        // an older relay rejects the yaw field; keep emoting without it
+        if(result.statusCode == 400 && relay.requestHadYaw)
         {
-            relay.sessionToken = ""
-            relay.nextAuthAttempt = Time()+5.0
+            relay.noYaw = true
+            print("[EmoteRelay] The relay doesn't take locked facing yet; others see your dancer follow your view.")
+            return
+        }
+        if(result.statusCode == 409 && relay.syncUid != "" && relay.requestNonce == relay.nonce)
+        {
+            CeaikaEmotes_Stop()
+            CeaikaEmotes_Error("That player changed or stopped their emote. Release the sync key and try again.")
         }
         CeaikaEmotes_Error("Relay returned HTTP "+result.statusCode);
         return;
@@ -325,6 +363,7 @@ void function CeaikaEmotes_OnRelayReply(HttpRequestResponse result)
     {
         var data = DecodeJSON(result.body)
         table next
+        table nextClocks
         foreach(var peer in data.peers)
         {
             string emote = expect string(peer.emote)
@@ -335,10 +374,26 @@ void function CeaikaEmotes_OnRelayReply(HttpRequestResponse result)
             float age = expect float(peer.age)
             if(age<0.0 || age>3600.0) continue
             float startedAt = Time()-age
-            if(playerId in relay.peers && relay.peers[playerId].nonce == nonce) startedAt = expect float(relay.peers[playerId].startedAt)
+            string timeline = "timeline" in peer ? expect string(peer.timeline) : playerId+":"+nonce
+            // everyone on one playback shares one clock here. a clock per player
+            // keeps each one's own network delay and they slowly drift apart
+            if(timeline in relay.clocks) startedAt = expect float(relay.clocks[timeline])
+            if(timeline in nextClocks) startedAt = expect float(nextClocks[timeline])
+            nextClocks[timeline] <- startedAt
+            bool musicSource = !("music" in peer) || peer.music == true
+            entity localPlayer = GetLocalClientPlayer()
+            if(IsValid(localPlayer) && playerId == CeaikaEmotes_PlayerUID(localPlayer) &&
+               nonce == relay.nonce && relay.syncUid != "")
+            {
+                // old 0.4.0 relays dont send timelines, so take the clock of the
+                // dancer u were looking at when the hold finished
+                if(!("timeline" in peer)) startedAt = relay.syncStartedAt
+                musicSource = false
+            }
             next[playerId] <-
             {
-                nonce = nonce, startedAt = startedAt, emote = CeaikaEmotes_Catalog()[index].id, traversal = (CeaikaEmotes_Catalog()[index].traversal && "traversal" in peer && peer.traversal == true)
+                nonce = nonce, startedAt = startedAt, musicSource = musicSource, timeline = timeline,
+                yaw = CeaikaEmotes_JsonFloat("yaw" in peer ? peer.yaw : null, -999.0), emote = CeaikaEmotes_Catalog()[index].id, traversal = (CeaikaEmotes_Catalog()[index].traversal && "traversal" in peer && peer.traversal == true)
             }
         }
         array<string> expired
@@ -346,6 +401,7 @@ void function CeaikaEmotes_OnRelayReply(HttpRequestResponse result)
         if(!(playerId in next) || next[playerId].nonce != entry.nonce) expired.append(playerId)
         foreach(string playerId in expired) delete relay.cancelledPlayback[playerId]
         relay.peers = next
+        relay.clocks = nextClocks
         relay.lastReplyTime = Time()
     }
     catch(error)
@@ -358,8 +414,332 @@ void function CeaikaEmotes_Remove(string playerId)
 {
     if(!(playerId in relay.dancers)) return
     if(relay.dancers[playerId].source == GetLocalClientPlayer()) CeaikaEmotes_ClearCamera()
+    CeaikaEmotes_ClearExtras(expect array(relay.dancers[playerId].extras))
     if(IsValid(relay.dancers[playerId].model)) relay.dancers[playerId].model.Destroy()
     delete relay.dancers[playerId]
+}
+
+// does this dancer's music play. whoever started the playback has it, if they
+// stop someone synced to them (same timeline, so not a paired part) keeps it
+// going from the same spot. lowest uid wins so every client picks the same guy
+// and nobody hears it twice
+bool function CeaikaEmotes_CarriesMusic(string playerId, var state)
+{
+    if(state.musicSource) return true
+    string timeline = expect string(state.timeline)
+    string carrier = ""
+    foreach(string uid, var peer in relay.peers)
+    {
+        if(expect string(peer.timeline) != timeline) continue
+        if(peer.musicSource) return false
+        if(carrier == "" || uid < carrier) carrier = uid
+    }
+    return carrier == playerId
+}
+
+// is listener on the same playback as player, synced or paired with them
+// (the relay marks joins with "-j"/"-p" on the timeline)
+bool function CeaikaEmotes_DancingWith(entity listener, entity player)
+{
+    if(relay.emote == "" || !IsValid(listener) || !IsValid(player)) return false
+    string a = CeaikaEmotes_PlayerUID(listener)
+    string b = CeaikaEmotes_PlayerUID(player)
+    if(!(a in relay.peers) || !(b in relay.peers)) return false
+    return CeaikaEmotes_BaseTimeline(expect string(relay.peers[a].timeline)) == CeaikaEmotes_BaseTimeline(expect string(relay.peers[b].timeline))
+}
+
+string function CeaikaEmotes_BaseTimeline(string timeline)
+{
+    if(timeline.len() < 3) return timeline
+    string mark = timeline.slice(timeline.len()-2)
+    return mark == "-j" || mark == "-p" ? timeline.slice(0, timeline.len()-2) : timeline
+}
+
+// DecodeJSON gives 90 as an int and 90.5 as a float, and float() on a float
+// throws "cannot cast float to float". that one cancelled every emote after 6s
+float function CeaikaEmotes_JsonFloat(var value, float fallback)
+{
+    if(value == null) return fallback
+    if(typeof(value) == "float") return expect float(value)
+    if(typeof(value) == "int") return float(expect int(value))
+    return fallback
+}
+
+// whoever joined the playback on timeline hug style, or "". the relay gives a
+// joiner the leader's timeline + "-j"
+string function CeaikaEmotes_JoinerOf(string timeline)
+{
+    foreach(string uid, var peer in relay.peers)
+        if(expect string(peer.timeline) == timeline+"-j") return uid
+    return ""
+}
+
+// the leader a joiner joined, or "". hug style joins are "-j", last forever
+// style ones (both start together) are "-p"
+string function CeaikaEmotes_LeaderOf(string timeline)
+{
+    if(timeline.len() < 3) return ""
+    string mark = timeline.slice(timeline.len()-2)
+    if(mark != "-j" && mark != "-p") return ""
+    string lead = timeline.slice(0, timeline.len()-2)
+    foreach(string uid, var peer in relay.peers)
+        if(expect string(peer.timeline) == lead) return uid
+    return ""
+}
+
+// seconds into a playback, before looping. a leader that waits for a partner
+// (joinAt) holds there till someone joins and then goes by the joiner's clock,
+// so the paired part plays together and ends together
+float function CeaikaEmotes_PlayTime(CeaikaEmoteDef emoteDef, var state)
+{
+    float elapsed = max(0.0, (Time()-expect float(state.startedAt))*emoteDef.playbackRate)
+    // a joiner of a waiting leader starts once the leader's intro is done
+    string lead = CeaikaEmotes_LeaderOf(expect string(state.timeline))
+    if(lead != "")
+    {
+        float together = CeaikaEmotes_Together(expect float(state.startedAt), relay.peers[lead])
+        if(together >= 0.0) return max(0.0, (Time()-together)*emoteDef.playbackRate)
+    }
+    if(emoteDef.joinAt < 0.0) return elapsed
+    float joined = CeaikaEmotes_JoinStart(expect string(state.timeline))
+    if(joined < 0.0) return min(elapsed, emoteDef.joinAt)
+    float together = max(joined, expect float(state.startedAt)+emoteDef.joinAt/emoteDef.playbackRate)
+    if(Time() < together) return min(elapsed, emoteDef.joinAt)
+    return emoteDef.joinAt + (Time()-together)*emoteDef.playbackRate
+}
+
+// when a waiting leader and someone who joined at `joined` start the paired
+// part: the join, or the end of the leader's intro if they joined during it.
+// -1 if the leader doesnt wait for anyone
+float function CeaikaEmotes_Together(float joined, var leader)
+{
+    int index = CeaikaEmotes_Index(expect string(leader.emote))
+    if(index < 0 || CeaikaEmotes_Catalog()[index].joinAt < 0.0) return -1.0
+    CeaikaEmoteDef leaderDef = CeaikaEmotes_Catalog()[index]
+    return max(joined, expect float(leader.startedAt)+leaderDef.joinAt/leaderDef.playbackRate)
+}
+
+// when someone joined the playback on timeline (or em_pairtest's fake partner
+// on ours), -1 if nobody did
+float function CeaikaEmotes_JoinStart(string timeline)
+{
+    string joiner = CeaikaEmotes_JoinerOf(timeline)
+    if(joiner != "") return expect float(relay.peers[joiner].startedAt)
+    if(relay.pairTestEmote != "" && timeline == CeaikaEmotes_OwnTimeline()) return relay.pairTestStart
+    return -1.0
+}
+
+string function CeaikaEmotes_OwnTimeline()
+{
+    entity localPlayer = GetLocalClientPlayer()
+    string uid = IsValid(localPlayer) ? CeaikaEmotes_PlayerUID(localPlayer) : ""
+    return uid in relay.peers ? expect string(relay.peers[uid].timeline) : ""
+}
+
+// two people dancing a paired emote together. facing locks so nobody spins
+// away from their partner mid hug
+bool function CeaikaEmotes_PairJoined(string playerId, var state)
+{
+    string timeline = expect string(state.timeline)
+    if(CeaikaEmotes_LeaderOf(timeline) != "" || CeaikaEmotes_JoinStart(timeline) >= 0.0) return true
+    if(relay.pairTestEmote != "" && timeline == CeaikaEmotes_OwnTimeline()) return true
+    foreach(string uid, var peer in relay.peers)
+        if(expect string(peer.timeline) == timeline+"-p") return true
+    return false
+}
+
+// em_pairtest [off]: while doing a paired emote a fake partner joins u, only
+// on ur screen. for checking spacing/timing without bugging a friend
+void function CeaikaEmotes_PairTest(array<string> args = [])
+{
+    if(args.len() > 0 && args[0] == "off")
+    {
+        CeaikaEmotes_ClearPairTest()
+        return
+    }
+    int index = relay.emote == "" ? -1 : CeaikaEmotes_Index(relay.emote)
+    if(index < 0 || CeaikaEmotes_Catalog()[index].partner == "")
+    {
+        print("[EmoteRelay] Start a paired emote (Hug, Last Forever) first, then em_pairtest.")
+        return
+    }
+    CeaikaEmotes_ClearPairTest()
+    relay.pairTestEmote = CeaikaEmotes_Catalog()[index].partner
+    relay.pairTestStart = Time()
+    print("[EmoteRelay] Test partner joined as "+relay.pairTestEmote+"; em_pairtest off removes it.")
+}
+
+void function CeaikaEmotes_ClearPairTest()
+{
+    if(IsValid(relay.pairTestModel)) relay.pairTestModel.Destroy()
+    relay.pairTestEmote = ""
+}
+
+// puts the fake partner where a real one would stand
+void function CeaikaEmotes_UpdatePairTest(entity localPlayer)
+{
+    if(relay.pairTestEmote == "") return
+    string uid = IsValid(localPlayer) ? CeaikaEmotes_PlayerUID(localPlayer) : ""
+    int index = CeaikaEmotes_Index(relay.pairTestEmote)
+    if(relay.emote == "" || !(uid in relay.dancers) || !(uid in relay.peers) || index < 0)
+    {
+        CeaikaEmotes_ClearPairTest()
+        return
+    }
+    CeaikaEmoteDef partner = CeaikaEmotes_Catalog()[index]
+    var leader = relay.peers[uid]
+    int leaderIndex = CeaikaEmotes_Index(expect string(leader.emote))
+    if(leaderIndex < 0) return
+    entity dancer = expect entity(relay.dancers[uid].model)
+    // a waiting leader's partner starts when it joined; others share the start
+    float together = CeaikaEmotes_Together(relay.pairTestStart, leader)
+    float start = together >= 0.0 ? together : expect float(leader.startedAt)
+    float playTime = max(0.0, (Time()-start)*partner.playbackRate)
+    if(!partner.loops && playTime >= partner.duration)
+    {
+        CeaikaEmotes_ClearPairTest()
+        return
+    }
+    if(!IsValid(relay.pairTestModel))
+    {
+        relay.pairTestModel = CreateClientSidePropDynamic(dancer.GetOrigin(), dancer.GetAngles(), dancer.GetModelName())
+        relay.pairTestModel.SetAlive(true)
+        relay.pairTestModel.Anim_Play(partner.sequence)
+        relay.pairTestModel.SetPlaybackRate(partner.playbackRate)
+    }
+    float yaw = dancer.GetAngles().y
+    relay.pairTestModel.SetOrigin(CeaikaEmotes_PairSpot(dancer.GetOrigin(), yaw, partner))
+    relay.pairTestModel.SetAngles(<0, yaw+partner.pairYaw, 0>)
+    float clipTime = CeaikaEmotes_ClipTime(partner, playTime)
+    relay.pairTestModel.Anim_SetStartTime(Time()-clipTime/partner.playbackRate)
+    relay.pairTestModel.SetCycle(clipTime/partner.duration)
+}
+
+// where the joiner stands for a leader at origin facing yaw
+vector function CeaikaEmotes_PairSpot(vector origin, float yaw, CeaikaEmoteDef emoteDef)
+{
+    vector angles = <0, yaw, 0>
+    return origin+AnglesToForward(angles)*emoteDef.pairOffset.x+AnglesToRight(angles)*emoteDef.pairOffset.y
+}
+
+// moves the joiner's dancer next to the leader like fortnite does. the joiner's
+// real body is hidden while dancing so only the copy moves, not the player
+void function CeaikaEmotes_PlacePartner(entity model, CeaikaEmoteDef emoteDef, var state)
+{
+    string lead = CeaikaEmotes_LeaderOf(expect string(state.timeline))
+    if(lead == "") return
+    foreach(entity leader in GetPlayerArray())
+    {
+        if(!IsValid(leader) || CeaikaEmotes_PlayerUID(leader) != lead) continue
+        float yaw = lead in relay.dancers ? expect float(relay.dancers[lead].yaw) : leader.EyeAngles().y
+        model.SetOrigin(CeaikaEmotes_DancerOrigin(model, CeaikaEmotes_PairSpot(leader.GetOrigin(), yaw, emoteDef)))
+        model.SetAngles(<0, yaw+emoteDef.pairYaw, 0>)
+        return
+    }
+}
+
+// seconds into the clip for a playback that started elapsed seconds ago.
+// montage exports play the start once, then loop from loopStart. padded clips
+// have loopPad seconds of the loop copied past the end and we wrap in the
+// middle of that copy, so if the engine's clock is a bit ahead or behind it
+// still lands on loop frames instead of the wind up. that was the jitter on
+// swagger strut btw
+float function CeaikaEmotes_ClipTime(CeaikaEmoteDef emoteDef, float elapsed)
+{
+    float half = emoteDef.loopPad*0.5
+    float wrap = emoteDef.duration-half
+    if(elapsed < wrap || !emoteDef.loops) return clamp(elapsed, 0.0, emoteDef.duration)
+    float loop = emoteDef.duration-emoteDef.loopPad-emoteDef.loopStart
+    float t = elapsed-emoteDef.loopStart-half
+    return emoteDef.loopStart+half+t-loop*floor(t/loop)
+}
+
+void function CeaikaEmotes_ClearExtras(array extras)
+{
+    foreach(var state in extras)
+    {
+        if(IsValid(state.prop)) state.prop.Destroy()
+        state.prop = null
+        if(state.fx != -1 && EffectDoesExist(expect int(state.fx))) EffectStop(expect int(state.fx), false, true)
+        state.fx = -1
+    }
+}
+
+// props and effects ride the dancer, not the hidden player, and only exist
+// during their bit of the loop
+void function CeaikaEmotes_UpdateExtras(entity model, CeaikaEmoteDef emoteDef, array extras, float clipTime, bool titan)
+{
+    foreach(int i, CeaikaEmoteExtra extra in emoteDef.extras)
+    {
+        var state = extras[i]
+        if(titan && !extra.titans) continue
+        if(state.failed)
+        {
+            if(Time() < expect float(state.retryAt)) continue
+            state.failed = false
+        }
+        // on a Titan, an animated prop plays the clip built for that Titan's rig
+        string sequence = extra.sequence
+        if(titan && sequence != "")
+            sequence += "_"+CeaikaEmotes_TitanRig(model.GetModelName())
+        bool active = clipTime >= extra.start && (extra.stop < 0.0 || clipTime < extra.stop)
+        int attachment = extra.attachment == "" ? 0 : model.LookupAttachment(extra.attachment)
+        string parentAttachment = attachment > 0 ? extra.attachment : ""
+        try
+        {
+            if(extra.model != $"")
+            {
+                if(active && !IsValid(state.prop))
+                {
+                    entity prop = CreateClientSidePropDynamic(model.GetOrigin(), model.GetAngles(), extra.model)
+                    state.prop = prop
+                    prop.SetParent(model, parentAttachment)
+                    prop.SetLocalOrigin(extra.offset)
+                    prop.SetLocalAngles(extra.angles)
+                    if(sequence != "")
+                    {
+                        if(prop.LookupSequence(sequence) < 0) throw "Missing sequence: "+sequence
+                        prop.Anim_Play(sequence)
+                    }
+                }
+                else if(!active && IsValid(state.prop))
+                {
+                    state.prop.Destroy()
+                    state.prop = null
+                }
+                if(active && sequence != "" && IsValid(state.prop))
+                {
+                    // same clock as the dancer, loop point and all
+                    state.prop.Anim_SetStartTime(Time()-clipTime/emoteDef.playbackRate)
+                    state.prop.SetCycle(clipTime/emoteDef.duration)
+                }
+            }
+            if(extra.fx != $"")
+            {
+                bool running = state.fx != -1 && EffectDoesExist(expect int(state.fx))
+                if(active && !running)
+                    state.fx = StartParticleEffectOnEntity(model, GetParticleSystemIndex(extra.fx), attachment > 0 ? FX_PATTACH_POINT_FOLLOW : FX_PATTACH_ABSORIGIN_FOLLOW, attachment)
+                else if(!active && running)
+                {
+                    EffectStop(expect int(state.fx), false, true)
+                    state.fx = -1
+                }
+            }
+        }
+        catch(error)
+        {
+            // a broken prop shouldnt kill the whole dance. printed straight away
+            // (once per dancer) cus the throttled error log eats it if a relay
+            // message just came in. and dont leave a half made prop on the
+            // dancer, it used to sit there frozen off the hands. bin it, retry
+            if(IsValid(state.prop)) state.prop.Destroy()
+            state.prop = null
+            state.failed = true
+            state.retryAt = Time()+1.0
+            state.tries++
+            if(state.tries == 1) print("[EmoteRelay] "+emoteDef.id+" extra "+i+" ("+string(extra.model)+") failed: "+error)
+        }
+    }
 }
 
 void function CeaikaEmotes_ClearCamera()
@@ -381,8 +761,8 @@ float function CeaikaEmotes_SmoothYaw(float current, float target, float dt)
     float yaw = current+delta*(1.0-pow(0.5, max(0.0, dt)/0.035))
     return yaw-360.0*floor((yaw+180.0)/360.0)
 }
-// Conservative sphere/frustum intersection: allow dancing limbs at the edges.
-// FOV is the engine's 4:3 horizontal base; wider screens expand horizontally.
+// rough is it on screen check, a bit generous so arms flailing at the edge
+// dont pop. fov is the engine's 4:3 one, wider screens just get more sideways
 bool function CeaikaEmotes_InView(vector center, vector camera, vector forward, vector right, vector up, float tanX, float tanY, float radius)
 {
     vector delta = center-camera
@@ -407,12 +787,15 @@ string function CeaikaEmotes_HideRequest(entity player, entity localPlayer, stri
     return hidden
 }
 
-string function CeaikaEmotes_BuildMusicRequest(entity player, entity listener, float age, int track)
+// voice 1 is a dancer's intro, kept apart from their music loop (voice 0).
+string function CeaikaEmotes_BuildMusicRequest(entity player, entity listener, float age, int track, int voice = 0)
 {
     float volume = clamp(GetConVarFloat("em_volume"), 0.0, 1.0)
     float gain = volume * clamp(GetConVarFloat("sound_volume"), 0.0, 1.0)
     float pan = 0.0
-    bool ownEmote = player == listener
+    // synced or paired with them: the shared music plays as your own does,
+    // centred and at full volume, not from their direction
+    bool ownEmote = player == listener || CeaikaEmotes_DancingWith(listener, player)
 
     if (!ownEmote)
     {
@@ -431,7 +814,7 @@ string function CeaikaEmotes_BuildMusicRequest(entity player, entity listener, f
     if (gain <= 0.0001)
         return ""
 
-    return format("%d,%.4f,%.4f,%.4f,%d,%d", player.GetEntIndex(), age, gain, pan, ownEmote ? 1 : 0, track)
+    return format("%d,%.4f,%.4f,%.4f,%d,%d", player.GetEntIndex()+voice*4096, age, gain, pan, ownEmote ? 1 : 0, track)
 }
 
 void function CeaikaEmotes_UpdateDancers()
@@ -443,7 +826,12 @@ void function CeaikaEmotes_UpdateDancers()
         SetConVarString("em_camera_request", "0")
         CeaikaEmotes_ClearCamera()
         CeaikaEmotes_ReleaseDuck()
-        foreach(string playerId, var entry in relay.dancers) if(IsValid(entry.model)) entry.model.Destroy()
+        foreach(string playerId, var entry in relay.dancers)
+        {
+            CeaikaEmotes_ClearExtras(expect array(entry.extras))
+            if(IsValid(entry.model)) entry.model.Destroy()
+        }
+        CeaikaEmotes_ClearPairTest()
         relay.dancers.clear()
     })
     while(true)
@@ -521,15 +909,38 @@ void function CeaikaEmotes_UpdateDancers()
                 int index = CeaikaEmotes_Index(expect string(state.emote))
                 if(index<0) continue
                 CeaikaEmoteDef emoteDef = CeaikaEmotes_Catalog()[index]
-                if(GetConVarBool("em_music") && musicCount<16 && IsValid(localPlayer))
+                if(!emoteDef.loops && CeaikaEmotes_PlayTime(emoteDef, state) >= emoteDef.duration)
                 {
-                    float age = max(0.0, Time() - expect float(state.startedAt))
-                    string request = CeaikaEmotes_BuildMusicRequest(player, localPlayer, age, emoteDef.track)
-                    if (request != "")
+                    // a one-shot emote has played through: end ours, and drop
+                    // theirs until they start another (their client ends it too)
+                    if(player == localPlayer) CeaikaEmotes_Stop()
+                    else relay.cancelledPlayback[playerId] <-
                     {
-                        if (music != "") music += ";"
-                        music += request
-                        musicCount++
+                        nonce = state.nonce, source = player
+                    }
+                    continue
+                }
+                if(CeaikaEmotes_CarriesMusic(playerId, state) && GetConVarBool("em_music") && IsValid(localPlayer))
+                {
+                    // old dlls say 0 and only have the 16 built in tracks. asking for
+                    // a track the dll doesnt have mutes everyone, not just that one
+                    int tracks = GetConVarInt("em_audio_tracks") > 0 ? GetConVarInt("em_audio_tracks") : 16
+                    float age = max(0.0, Time() - expect float(state.startedAt))
+                    float musicAge = emoteDef.introTrack >= 0 && emoteDef.musicAfterIntro ? age-emoteDef.introDuration : age-emoteDef.musicDelay
+                    array<int> voiceTracks = [emoteDef.track, emoteDef.introTrack]
+                    array<float> voiceAges = [musicAge, age]
+                    foreach(int voice, int track in voiceTracks)
+                    {
+                        // intros play once, the dll wont loop them
+                        if(track < 0 || track >= tracks || voiceAges[voice] < 0.0 || musicCount >= 16) continue
+                        if(voice == 1 && voiceAges[voice] >= emoteDef.introDuration) continue
+                        string request = CeaikaEmotes_BuildMusicRequest(player, localPlayer, voiceAges[voice], track, voice)
+                        if (request != "")
+                        {
+                            if (music != "") music += ";"
+                            music += request
+                            musicCount++
+                        }
                     }
                 }
                 bool inView = player == localPlayer || player == viewer || !IsValid(viewer) ||
@@ -537,7 +948,11 @@ void function CeaikaEmotes_UpdateDancers()
                 if(!inView)
                 {
                     // dont animate off-screen dancers. keep their music and hiding state.
+                    // keep the dancer itself too: the engine doesnt draw or pose it
+                    // off screen anyway, and rebuilding it (props and all) every time
+                    // someone turned around was most of the cost
                     hidden = CeaikaEmotes_HideRequest(player, localPlayer, hidden)
+                    if(playerId in relay.dancers) active[playerId] <- true
                     relay.culled++
                     continue
                 }
@@ -570,9 +985,11 @@ void function CeaikaEmotes_UpdateDancers()
                         CeaikaEmotes_Error("Model creation failed: "+error)
                         continue
                     }
+                    array extras
+                    foreach(CeaikaEmoteExtra extra in emoteDef.extras) extras.append({prop = null, fx = -1, failed = false, retryAt = 0.0, tries = 0})
                     relay.dancers[playerId] <-
                     {
-                        source = player, model = model, nonce = state.nonce, modelAsset = original, yaw = player.EyeAngles().y
+                        source = player, model = model, nonce = state.nonce, modelAsset = original, yaw = player.EyeAngles().y, extras = extras
                     }
                     print("[EmoteRelay] Rendering received emote in place for "+player.GetPlayerName())
                 }
@@ -584,16 +1001,47 @@ void function CeaikaEmotes_UpdateDancers()
                 }
                 active[playerId] <- true
                 SetTeam(model, player.GetTeam())
-                model.SetOrigin(player.GetOrigin())
-                float yaw = CeaikaEmotes_SmoothYaw(expect float(relay.dancers[playerId].yaw), player.EyeAngles().y, FrameTime())
+                model.SetOrigin(CeaikaEmotes_DancerOrigin(model, player.GetOrigin()))
+                float facing = player.EyeAngles().y
+                if(player == localPlayer)
+                {
+                    // freelook or a joined pair: the camera orbits, the dancer holds
+                    bool locked = CeaikaEmotes_FreelookHeld() || CeaikaEmotes_PairJoined(playerId, state)
+                    if(locked && !relay.yawLocked) relay.lockedYaw = expect float(relay.dancers[playerId].yaw)
+                    relay.yawLocked = locked
+                    if(locked) facing = relay.lockedYaw
+                }
+                else if(expect float(state.yaw) > -900.0)
+                    facing = expect float(state.yaw)
+                float yaw = CeaikaEmotes_SmoothYaw(expect float(relay.dancers[playerId].yaw), facing, FrameTime())
                 relay.dancers[playerId].yaw = yaw
                 model.SetAngles(<0, yaw, 0>)
-                float cycles = (Time()-expect float(state.startedAt))*emoteDef.playbackRate/emoteDef.duration
-                model.SetCycle(cycles-floor(cycles))
+                if(emoteDef.pairOffset != <0, 0, 0>) CeaikaEmotes_PlacePartner(model, emoteDef, state)
+                float clipTime = CeaikaEmotes_ClipTime(emoteDef, CeaikaEmotes_PlayTime(emoteDef, state))
+                // Anim_Play runs its own clock and it overwrites SetCycle the
+                // next time the engine ticks, so move the clock itself. letting
+                // the engine wrap on its own replays a montage's wind up
+                try
+                {
+                    model.Anim_SetStartTime(Time()-clipTime/emoteDef.playbackRate)
+                }
+                catch(error)
+                {
+                    // a clip ported with Loop off stops being a scripted
+                    // animation once it reaches its end; start it again
+                    model.Anim_Play(emoteDef.sequence)
+                    model.SetPlaybackRate(emoteDef.playbackRate)
+                    model.Anim_SetStartTime(Time()-clipTime/emoteDef.playbackRate)
+                }
+                model.SetCycle(clipTime/emoteDef.duration)
+                if(emoteDef.extras.len() > 0)
+                    CeaikaEmotes_UpdateExtras(model, emoteDef, expect array(relay.dancers[playerId].extras), clipTime, player.IsTitan())
                 hidden = CeaikaEmotes_HideRequest(player, localPlayer, hidden)
                 if(player == localPlayer) CeaikaEmotes_Camera(player, model)
             }
         }
+        CeaikaEmotes_UpdatePairTest(localPlayer)
+        if(relay.emote == "") relay.yawLocked = false
         array<string> removed
         foreach(string playerId, var entry in relay.dancers) if(!(playerId in active)) removed.append(playerId)
         foreach(string playerId in removed) CeaikaEmotes_Remove(playerId)
@@ -602,4 +1050,86 @@ void function CeaikaEmotes_UpdateDancers()
         SetConVarString("em_audio_request", music == "" ? "" : relay.pulse+":"+music)
         WaitFrame()
     }
+}
+
+// what u get when u hold the sync key on someone doing emote: the same one,
+// or the other half if its paired
+string function CeaikaEmotes_JoinEmote(string emote)
+{
+    int index = CeaikaEmotes_Index(emote)
+    if(index < 0 || CeaikaEmotes_Catalog()[index].partner == "") return emote
+    return CeaikaEmotes_Catalog()[index].partner
+}
+
+// the player u could sync with rn: close, actually emoting, not cancelled
+entity function CeaikaEmotes_SyncTarget()
+{
+    entity localPlayer = GetLocalClientPlayer()
+    entity nearest
+    if(!IsValid(localPlayer) || !IsAlive(localPlayer) || !localPlayer.IsOnGround() ||
+       !GetConVarBool("em_enabled") || GetConVarInt("em_native_ready") != 1 ||
+       Time()-relay.lastReplyTime >= 6.0) return nearest
+    if(relay.emote != "" || clGlobal.isMenuOpen || CeaikaEmotes_IsWheelOpen()) return nearest
+    // the nearest dancer within reach, no need to aim at them; still not
+    // through walls
+    vector eye = localPlayer.EyePosition()
+    float best = 150.0
+    foreach(entity player in GetPlayerArray())
+    {
+        if(player == localPlayer || !IsValid(player) || !IsAlive(player) || !player.IsOnGround()) continue
+        string uid = CeaikaEmotes_PlayerUID(player)
+        if(!(uid in relay.peers)) continue
+        var state = relay.peers[uid]
+        int index = CeaikaEmotes_Index(expect string(state.emote))
+        if(index < 0) continue
+        CeaikaEmoteDef emoteDef = CeaikaEmotes_Catalog()[index]
+        if(!emoteDef.listed && emoteDef.partner == "") continue
+        // a waiting leader can be joined straight away (the pair starts once
+        // their intro is done), but only by one partner
+        if(emoteDef.joinAt >= 0.0 && CeaikaEmotes_JoinerOf(expect string(state.timeline)) != "") continue
+        if(!CeaikaEmotes_SupportsEmote(localPlayer, CeaikaEmotes_JoinEmote(expect string(state.emote))) ||
+           !CeaikaEmotes_SupportsEmote(player, expect string(state.emote))) continue
+        if(Length2D(player.GetVelocity()) > (state.traversal ? 260.0 : 80.0)) continue
+        if(uid in relay.cancelledPlayback && relay.cancelledPlayback[uid].nonce == state.nonce &&
+           relay.cancelledPlayback[uid].source == player) continue
+        float distance = Distance(localPlayer.GetOrigin(), player.GetOrigin())
+        if(distance > best) continue
+        vector point = player.GetWorldSpaceCenter()
+        // dancers and their props arent walls
+        array<entity> ignored = [localPlayer, player]
+        foreach(string dancerUid, var dancer in relay.dancers)
+            if(IsValid(dancer.model)) ignored.append(expect entity(dancer.model))
+        TraceResults sight = TraceLine(eye, point, ignored, TRACE_MASK_SOLID, TRACE_COLLISION_GROUP_NONE)
+        if(sight.startSolid || sight.fraction < 0.99) continue
+        best = distance
+        nearest = player
+    }
+    return nearest
+}
+table function CeaikaEmotes_GetSyncTarget()
+{
+    entity target = CeaikaEmotes_SyncTarget()
+    if(!IsValid(target)) return {}
+    string uid = CeaikaEmotes_PlayerUID(target)
+    string emote = expect string(relay.peers[uid].emote)
+    return {uid = uid, nonce = relay.peers[uid].nonce, name = target.GetPlayerName(),
+            paired = CeaikaEmotes_JoinEmote(emote) != emote}
+}
+void function CeaikaEmotes_Sync(string uid, string nonce)
+{
+    // check again, they mightve stopped or walked off during the hold
+    entity target = CeaikaEmotes_SyncTarget()
+    if(!IsValid(target) || CeaikaEmotes_PlayerUID(target) != uid || !(uid in relay.peers)) return
+    var state = relay.peers[uid]
+    if(state.nonce != nonce) return
+    // the relay accepts the partner part on the target's timeline too
+    array<string> args = [CeaikaEmotes_JoinEmote(expect string(state.emote))]
+    if(state.traversal) args.append("traversal")
+    args.append("join")
+    string previousNonce = relay.nonce
+    CeaikaEmotes_Play(args)
+    if(relay.nonce == previousNonce) return
+    relay.syncUid = uid
+    relay.syncNonce = nonce
+    relay.syncStartedAt = expect float(state.startedAt)
 }

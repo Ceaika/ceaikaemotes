@@ -4,6 +4,7 @@ import argparse
 import hmac
 import ipaddress
 import json
+import math
 import re
 import secrets
 import threading
@@ -12,9 +13,8 @@ from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from identity import Sessions, AuthRejected, AuthorityUnavailable
 
-VERSION = "0.3.0"
+VERSION = "0.5.1"
 MAX_BODY_BYTES = 8192
 MAX_ROOM_PLAYERS = 32
 PEER_TIMEOUT_SECONDS = 6
@@ -31,15 +31,48 @@ EMOTES = (
     "griddy_traversal",
     "emote_hype",
     "emote_oj",
-    "emote_laugh",
     "emote_rambunctious",
     "emote_technozombie",
     "emote_smoothmoves",
     "emote_squatkick",
     "emote_takethel",
+    "emote_laugh",
     "emote_worm",
+    "emote_voidredemption",
+    "emote_epicsaxguy",
+    "emote_sad_trombone",
+    "emote_alors",
+    "emote_boogiedown",
+    "emote_breakin",
+    "emote_downward",
+    "emote_fireball",
+    "emote_flamenco",
+    "emote_freeflow",
+    "emote_gangnam",
+    "emote_macarena",
+    "emote_pompous",
+    "emote_pumpernickel",
+    "emote_robot",
+    "emote_rollie",
+    "emote_scenario",
+    "emote_lastforever",
+    "emote_lastforever_b",
+    "emote_patpat",
+    "emote_patpat_b",
 )
-TRAVERSAL = ("bbd_traversal", "griddy_traversal")
+# Paired emotes: syncing onto one of these plays the other part on the same
+# timeline (Last Forever: Ayo and Teo).
+PAIRS = {
+    "emote_lastforever": "emote_lastforever_b",
+    "emote_lastforever_b": "emote_lastforever",
+}
+# Joins that start when they join instead of sharing the leader's start (Pat
+# Pat: the leader waits for someone). The joiner gets the leader's timeline
+# plus "-j" so clients can pair them up.
+JOINS = {
+    "emote_patpat": "emote_patpat_b",
+}
+TRAVERSAL = ("bbd_traversal", "griddy_traversal", "emote_fireball", "emote_gangnam", "emote_pompous", "emote_pumpernickel")
 
 
 class Room:
@@ -51,7 +84,7 @@ class Room:
     def sync(self, data):
         if not isinstance(data, dict):
             raise ValueError("object required")
-        if set(data) - {"uid", "map", "nonce", "emote", "traversal"}:
+        if set(data) - {"uid", "map", "nonce", "emote", "traversal", "sync_uid", "sync_nonce", "yaw"}:
             raise ValueError("unknown fields")
 
         player_id = data.get("uid", "")
@@ -59,6 +92,12 @@ class Room:
         playback_id = data.get("nonce", "")
         emote = data.get("emote", "")
         traversal = data.get("traversal", False)
+        # a dancer's facing while it's locked (freelook, joined pair), so other
+        # players don't see it turn with the player's view; absent: follow view
+        yaw = data.get("yaw")
+        if yaw is not None and (isinstance(yaw, bool) or not isinstance(yaw, (int, float))
+                                or not math.isfinite(yaw) or abs(yaw) > 720):
+            raise ValueError("invalid yaw")
 
         if (
             not isinstance(player_id, str)
@@ -81,6 +120,17 @@ class Room:
         if traversal and emote not in TRAVERSAL:
             raise ValueError("emote is stationary")
 
+        sync_uid = data.get("sync_uid")
+        sync_nonce = data.get("sync_nonce")
+        if "sync_uid" in data or "sync_nonce" in data:
+            if (not isinstance(sync_uid, str)
+                or not re.fullmatch(r"[0-9]{1,24}", sync_uid)
+                or int(sync_uid) == 0 or sync_uid == player_id
+                or not isinstance(sync_nonce, str)
+                or not re.fullmatch(r"[a-zA-Z0-9_.-]{1,80}", sync_nonce)
+                or not emote):
+                raise ValueError("invalid sync target")
+
         now = self.clock()
         with self.lock:
             self.peers = {
@@ -102,6 +152,26 @@ class Room:
                 previous["traversal"],
             ) == (playback_id, emote, map_name, traversal)
             started_at = previous["start"] if same_playback else now
+            timeline = previous["timeline"] if same_playback else secrets.token_hex(12)
+            music = previous["music"] if same_playback else bool(emote)
+            if sync_uid is not None and not same_playback:
+                target = self.peers.get(sync_uid)
+                if (target is None or target["map"] != map_name
+                    or target["nonce"] != sync_nonce
+                    or emote not in (target["emote"], PAIRS.get(target["emote"]), JOINS.get(target["emote"]))
+                    or target["traversal"] != traversal):
+                    return 409, {"error": "sync target changed or unavailable"}
+                if emote == JOINS.get(target["emote"]):
+                    started_at = now
+                    timeline = target["timeline"] + "-j"
+                elif emote == PAIRS.get(target["emote"]):
+                    # same start; "-p" tells clients who joined whom
+                    started_at = target["start"]
+                    timeline = target["timeline"] + "-p"
+                else:
+                    started_at = target["start"]
+                    timeline = target["timeline"]
+                music = False
             self.peers[player_id] = {
                 "uid": player_id,
                 "map": map_name,
@@ -109,6 +179,9 @@ class Room:
                 "emote": emote,
                 "traversal": traversal,
                 "start": started_at,
+                "timeline": timeline,
+                "music": music,
+                "yaw": None if yaw is None else round(float(yaw), 1),
                 "seen": now,
             }
             peers = [
@@ -118,6 +191,9 @@ class Room:
                     "emote": peer["emote"],
                     "traversal": peer["traversal"],
                     "age": round(now - peer["start"], 3),
+                    "timeline": peer["timeline"],
+                    "music": peer["music"],
+                    "yaw": peer.get("yaw"),
                 }
                 for peer in self.peers.values()
                 if peer["map"] == map_name
@@ -177,10 +253,6 @@ class Server(ThreadingHTTPServer):
         super().__init__(address, Handler)
         self.key = key
         self.room = Room()
-        self.sessions = Sessions()
-        self.auth_budget = RequestBudget(
-            rate=0.1, capacity=3, total_rate=1, total_capacity=4
-        )
         self.budget = RequestBudget()
         self.trust_proxy_header = trust_proxy_header
         self.slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
@@ -280,7 +352,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.request_allowed():
             return
-        if self.path not in ("/sync", "/auth"):
+        if self.path != "/sync":
             self.reply(404, {"error": "not found"})
             return
         auth = self.headers.get_all("Authorization", [])
@@ -288,18 +360,9 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(401, {"error": "authentication required"})
             return
         bearer = auth[0][7:]
-        if self.path == "/auth":
-            if not hmac.compare_digest(bearer.encode(), self.server.key.encode()):
-                self.reply(401, {"error": "invalid room key"})
-                return
-            if not self.server.auth_budget.allow(self.request_address):
-                self.reply(429, {"error": "authentication rate limited"})
-                return
-        else:
-            verified_uid = self.server.sessions.resolve(bearer)
-            if verified_uid is None:
-                self.reply(401, {"error": "session expired or invalid"})
-                return
+        if not hmac.compare_digest(bearer.encode(), self.server.key.encode()):
+            self.reply(401, {"error": "invalid room key"})
+            return
         lengths = self.headers.get_all("Content-Length", [])
         if self.headers.get("Transfer-Encoding") is not None or len(lengths) != 1:
             self.reply(400, {"error": "invalid framing"})
@@ -315,18 +378,7 @@ class Handler(BaseHTTPRequestHandler):
             if len(raw) != length:
                 raise ValueError("incomplete body")
             data = json.loads(raw, parse_constant=reject_nonfinite_number)
-            if self.path == "/auth":
-                status, body = 200, self.server.sessions.authenticate(data)
-            else:
-                if not isinstance(data, dict) or "uid" in data:
-                    raise ValueError("sync identity comes from the session")
-                status, body = self.server.room.sync(dict(data, uid=verified_uid))
-        except AuthRejected:
-            self.reply(401, {"error": "EA verification rejected"})
-            return
-        except AuthorityUnavailable:
-            self.reply(503, {"error": "EA verification unavailable"})
-            return
+            status, body = self.server.room.sync(data)
         except (ValueError, TypeError, UnicodeError, RecursionError):
             self.reply(400, {"error": "invalid request"})
             return

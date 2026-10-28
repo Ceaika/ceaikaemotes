@@ -1,5 +1,10 @@
 {
   "Preload": {
     "ceaika_emote_wheel.rpak": true
+  },
+  "Postload": {
+    "ceaika_emote_voidredemption.rpak": "common.rpak",
+    "ceaika_emote_epicsaxguy.rpak": "common.rpak",
+    "ceaika_emote_sad_trombone.rpak": "common.rpak"
   }
 }

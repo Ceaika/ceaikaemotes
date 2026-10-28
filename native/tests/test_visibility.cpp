@@ -74,9 +74,10 @@ static void *Renderable(void *entity)
 }
 static bool cachedVisible = true;
 static int visibilityRefreshes = 0;
+static bool actorDrawable = true; // false: dead, mid-embark
 static bool OriginalShouldDraw(void *)
 {
-    return true;
+    return actorDrawable;
 }
 static void RefreshVisibility(void *entity)
 {
@@ -175,6 +176,22 @@ int main()
     plugin.RunFrame();
     assert(Count() == 0);
     assert(actor.renderable.table == fakeRenderTable + 1);
+    // A changed handle does not necessarily reset the renderable's vtable.
+    // Re-hiding must not capture our previous hidden table as the original.
+    strcpy(request.text, "61:1");
+    testClock += 100;
+    plugin.RunFrame();
+    assert(Count() == 1);
+    actor.handle += 65536;
+    strcpy(request.text, "62:1");
+    testClock += 100;
+    plugin.RunFrame();
+    assert(Count() == 1);
+    request.text[0] = 0;
+    testClock += 100;
+    plugin.RunFrame();
+    assert(Count() == 0 && actor.renderable.table == fakeRenderTable + 1);
+    assert(GetVirtualFunction<bool (*)(void *)>(&actor.renderable, 3)(&actor.renderable));
     strcpy(request.text, "7:1");
     testClock += 100;
     plugin.RunFrame();
@@ -249,7 +266,56 @@ int main()
     request.text[0] = 0;
     plugin.RunFrame();
     assert(Count() == 0);
-    puts("Visibility tests passed: cached crouch/jump visibility refresh, idle polling and wake, hide, "
-         "restore, RTTI, timeout, frozen request, malformed input, duplicate IDs, recycled handle, VM "
-         "teardown.");
+
+    // A pilot who stops emoting by dying: their restore can't refresh
+    // visibility while they can't be drawn (the engine would drop them from
+    // the render list and never add them back on respawn); it refreshes once
+    // they can be drawn again, once.
+    strcpy(request.text, "13:1");
+    testClock += 100;
+    plugin.RunFrame();
+    assert(Count() == 1);
+    RefreshVisibility(&actor); // the engine re-checked while hidden
+    assert(!cachedVisible);
+    actorDrawable = false;
+    const int beforeDeath = visibilityRefreshes;
+    request.text[0] = 0;
+    testClock += 100;
+    plugin.RunFrame();
+    assert(Count() == 0 && actor.renderable.table == fakeRenderTable + 1);
+    assert(visibilityRefreshes == beforeDeath);
+    testClock += 100;
+    plugin.RunFrame();
+    assert(visibilityRefreshes == beforeDeath && !cachedVisible);
+    actorDrawable = true; // respawned
+    testClock += 100;
+    plugin.RunFrame();
+    assert(visibilityRefreshes == beforeDeath + 1 && cachedVisible);
+    testClock += 100;
+    plugin.RunFrame();
+    assert(visibilityRefreshes == beforeDeath + 1);
+    // Hidden again before it could be drawn: that restore refreshes instead.
+    strcpy(request.text, "14:1");
+    testClock += 100;
+    plugin.RunFrame();
+    actorDrawable = false;
+    request.text[0] = 0;
+    testClock += 100;
+    plugin.RunFrame();
+    strcpy(request.text, "15:1");
+    testClock += 100;
+    plugin.RunFrame();
+    assert(Count() == 1);
+    actorDrawable = true;
+    const int beforeRehide = visibilityRefreshes;
+    testClock += 100;
+    plugin.RunFrame();
+    assert(visibilityRefreshes == beforeRehide); // still hidden: no refresh
+    request.text[0] = 0;
+    testClock += 100;
+    plugin.RunFrame();
+    assert(Count() == 0 && visibilityRefreshes == beforeRehide + 1 && cachedVisible);
+    puts("Visibility tests passed: cached crouch/jump visibility refresh, deferred refresh after an "
+         "undrawable restore, idle polling and wake, hide, restore, RTTI, timeout, frozen request, malformed "
+         "input, duplicate IDs, recycled handle, VM teardown.");
 }

@@ -1,3 +1,4 @@
+global function CeaikaEmotes_IsWheelOpen
 global function CeaikaEmotes_WheelInit
 global function CeaikaEmotes_OpenCommand
 global function CeaikaEmotes_Select
@@ -10,7 +11,9 @@ struct
 void function CeaikaEmotes_WheelInit()
 {
     if(IsMenuLevel()) return
-    foreach(int key in [KEY_B, KEY_G, KEY_H, KEY_J, BUTTON_DPAD_DOWN])
+    array<int> keys = CeaikaEmotes_BindableKeys()
+    keys.append(BUTTON_DPAD_DOWN)
+    foreach(int key in keys)
     RegisterButtonPressedCallback(key, void function(entity player) : (key)
     {
         CeaikaEmotes_WheelKey(key)
@@ -18,9 +21,8 @@ void function CeaikaEmotes_WheelInit()
 }
 void function CeaikaEmotes_WheelKey(int key)
 {
-    array<int> keys = [-1, KEY_B, KEY_G, KEY_H, KEY_J]
-    int binding = GetConVarInt("em_wheel_key")
-    bool keyboard = binding >= 0 && binding<keys.len() && keys[binding] == key
+    int bound = CeaikaEmotes_KeyCode(GetConVarString("em_wheel_bind"))
+    bool keyboard = bound >= 0 && bound == key
     bool pad = GetConVarBool("em_wheel_pad") && key == BUTTON_DPAD_DOWN
     if(keyboard || pad) CeaikaEmotes_Open(key)
 }
@@ -64,4 +66,9 @@ void function CeaikaEmotes_WheelWatch(int generation)
         }
         wait 0.1
     }
+}
+
+bool function CeaikaEmotes_IsWheelOpen()
+{
+    return file.wheelOpen
 }

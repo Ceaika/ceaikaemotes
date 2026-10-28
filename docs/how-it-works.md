@@ -8,23 +8,21 @@ ceaikaemotes uses a small HTTP relay for that part. it passes emote events betwe
 
 ## what gets sent
 
-`CeaikaEmotes_PollRelay` in `client/mods/ceaikaemotes/mod/scripts/vscripts/cl_ceaikaemotes.nut` sends a request roughly twice a second. it contains the map name, selected emote, playback ID and whether traversal is on. the session token goes in the Authorization header. the relay gets your UID from that session; a UID in the sync body is rejected. only one request can be in flight at a time.
+`CeaikaEmotes_PollRelay` in `client/mods/ceaikaemotes/mod/scripts/vscripts/cl_ceaikaemotes.nut` sends a request roughly twice a second. it contains your UID, the map name, selected emote, playback ID and whether traversal is on. the room key goes in the Authorization header. while your dancer's facing is locked (freelook, a joined pair) it also sends that yaw so other people don't see it turn with your view. only one request can be in flight at a time.
 
 the playback ID is called a nonce in the code. it just means this particular time you pressed play. restarting the same dance gets a new ID; continuing it keeps the same one. `Room.sync` in `relay/relay.py` uses that to preserve the start time instead of restarting the dance on every reply.
 
 `CeaikaEmotes_OnRelayReply` matches received UIDs to players already in your match. positions come from the game's normal player updates. the relay doesn't send positions, animation poses or music files.
 
-sync is approximate because requests take time to arrive. account verification proves the UID, but same-map filtering still doesn't prove two people are in the same server. see [the security notes](../SECURITY.md).
+sync is approximate because requests take time to arrive. the UID isn't verified (the EA login from 0.3.0 got removed again in 0.3.1), and same-map filtering doesn't prove two people are in the same server. see [the security notes](../SECURITY.md).
 
-## account verification
+## joining and pairs
 
-the first time you join, the UI asks whether you trust the configured relay. accepting saves that exact address in your profile. future launches authenticate automatically, and a different address needs another approval. the old console commands still work but aren't required.
+holding the join key (H by default) for 0.8 seconds picks the nearest dancer within 150 units that you can actually see, no aiming. the request then carries `sync_uid` and `sync_nonce`, the dancer's UID and playback ID. the relay checks that dancer is still on the same map playing the same thing, and gives you their timeline so everyone sees you on the same beat. if they changed emote in the meantime you get a 409 and nothing happens.
 
-`native/emote_auth.h` asks OriginSDK for a fresh `TITANFALL2-PC-SERVER` code. it doesn't borrow the token Ion is already using. a worker sends the code and UID to `/auth` over HTTPS, with redirects refused. `relay/identity.py` verifies the pair through Respawn's Stryder service and checks entitlement and online access. this follows the mechanism used by Atlas.
+`PAIRS` and `JOINS` in `relay/relay.py` are the paired emotes. joining Last Forever plays the other part on the same timeline. Hug waits for someone: the joiner starts when they join and gets the leader's timeline plus `-j`, so clients can match the two up. the joiner's dancer gets moved next to the leader using the catalog's `pairOffset`, their camera stays where they stood.
 
-the relay gives back a random session token valid for 30 minutes. the script renews a little before expiry. the relay stores a hash of the token and a short-lived hash of each used code, not the raw credentials. errors or an unavailable authority don't fall back to trusting a UID from the client.
-
-the room key only permits an authentication attempt. it isn't the session token. anyone can know that public key without gaining an emote session for your account. the relay still receives a short-lived EA credential during login, so the approval is an actual trust decision.
+whoever joined doesn't add a second copy of the song. the shared music plays centred and full volume for both, like it's your own, and keeps going if the leader stops.
 
 ## how the player actually dances
 
@@ -36,11 +34,11 @@ the original player still exists and keeps its normal collision and hitbox. the 
 
 animation phase comes from elapsed playback time and the catalog's duration/rate. a copy recreated after being offscreen resumes at the current point in the dance. rotation follows the player's camera using the shortest turn, with about a 35 ms half-life to soften sudden angle changes. the real player position and your camera aren't delayed by that smoothing.
 
-some imported animations can look a bit stepped even at high game FPS. smoother frame rendering doesn't add extra detail to the source animation.
+since 0.5.5 the clips are stored compressed like the game's own animations, so the engine blends between frames instead of stepping. props (the sax, the trombone, I'm A Mystery's rings) are separate clientside models playing their own clip next to the dancer, and they're hidden and shown piece by piece with bone scale.
 
 ## what the DLL handles
 
-`native/emote_visibility.cpp` handles local visibility, attached models and the third person camera. `native/emote_audio.h` handles music. Squirrel handles normal sync requests. `native/emote_auth.h` handles the initial EA-code exchange through Windows WinHTTP, keeping the raw code out of scripts, console variables and logs.
+`native/emote_visibility.cpp` handles local visibility, attached models and the third person camera. `native/emote_audio.h` handles music. Squirrel handles the relay requests. the DLL doesn't do any networking.
 
 the plugin uses private engine layouts, so it checks the loaded `client.dll` before using them: PE timestamp `0x5a271254`, image size `0x3d4c000`. this limits compatibility to the supported build. future client updates may require the offsets and interfaces to be checked again.
 
@@ -56,15 +54,19 @@ render requests include a changing heartbeat. if it stops updating for roughly 7
 
 `SetEmoteCamera` uses the client's camera interface for a local third person view, with collision checking and a 180-unit pilot distance or 520-unit titan distance. it saves and restores the previous custom camera data. it doesn't change `sv_cheats` or enable server cheat commands. individual servers can still have rules about client mods.
 
-billy bounce and griddy support traversal. the mod holds normal crouch input while they play, so movement uses crouch speed. it doesn't write a custom velocity. stopping releases the mod's own crouch input. jumping, attacking, titan melee or dying cancels the emote; moving also cancels stationary emotes.
+holding the freelook key (SHIFT by default) turns the camera around your dancer without turning the dancer. Mod Settings can invert up/down for it.
+
+billy bounce, griddy, fireball, gangnam style, swagger strut and pumpernickel support traversal. the mod holds normal crouch input while they play, so movement uses crouch speed. it doesn't write a custom velocity. stopping releases the mod's own crouch input. the stop key (SPACE), jumping, attacking, titan melee or dying cancels the emote; moving also cancels stationary emotes.
 
 ## music and proximity
 
-synchronised music needs to start at the current playback position, including when someone joins an emote partway through. seeking through game sound events wasn't reliable enough for that, so the plugin uses local WAV files through Windows `waveOut`.
+synchronised music needs to start at the current playback position, including when someone joins an emote partway through. seeking through game sound events wasn't reliable enough for that, so the plugin decodes local music files into memory at startup and plays them through Windows `waveOut`.
+
+releases ship the music as AAC `.m4a`, decoded with Windows Media Foundation (`native/emote_m4a.h`). AAC pads the end of a song, which would make loops drift, so `tools/encode_music.cpp` adds a small trailer with the real length and the DLL cuts the decoded audio to exactly that. a `.wav` with the same name still wins if it's there.
 
 `CeaikaEmotes_BuildMusicRequest` calculates playback age, gain and pan. your own emote stays stereo. other people's music is mixed to mono, then panned relative to your camera and faded with distance. the fade starts around 96 units and reaches silence at 1100 units. walls don't muffle it.
 
-the DLL loads a fixed list of 16 tracks. the relay can't request an arbitrary filename. the mixer accepts the supplied 44.1 and 48 kHz stereo PCM files and outputs 48 kHz, with up to 16 simultaneous voices. gain smoothing and short edge fades help avoid clicks. four 512-frame buffers add about 43 ms of queued audio, plus device latency.
+the DLL loads the 16 old built-in tracks (two slots are empty since laugh and the worm got cut) plus whatever `plugins/ceaikaemotes/tracks.txt` lists, in order. lines marked `once` are one-shot intros. the relay can't request an arbitrary filename. the mixer accepts stereo 16-bit music and outputs 48 kHz, with up to 16 simultaneous voices. gain smoothing and short edge fades help avoid clicks. four 512-frame buffers add about 43 ms of queued audio, plus device latency.
 
 `em_music`, `em_volume` and the game's master volume control playback. when there are no voices left, the worker drains and closes the audio device, then sleeps until needed. stale requests fade out as well. no music or microphone audio is streamed through the relay, and campaign music isn't replaced.
 
@@ -80,9 +82,9 @@ remote animated copies are skipped outside a conservative camera-frustum boundar
 
 ## models and the wheel
 
-pilot and titan models are shared across the emote catalog, with separate animation libraries for the dances. this avoids bundling a complete set of pilot models for every emote. source animation quality isn't reduced to make that saving.
+pilots get the dances through one include in `models/humans/pete/pilot_shared.mdl`, which every pilot model already pulls in, and each emote's clip lives in its own `models/emotes/<id>/anim.mdl`. titans use three chassis libraries, see [titans](titans.md). nothing ships a full copy of a pilot model.
 
-the client and UI wheel scripts use `sh_ceaikaemotes_catalog.nut`: eight sectors per page, two pages. selecting an entry passes its catalog ID to the normal play command, so the wheel and console use the same relay path. orange justice uses `emote_oj`, with `oj` and `orangejustice` aliases.
+the client and UI wheel scripts use `sh_ceaikaemotes_catalog.nut`: eight sectors per page, sorted A-Z by title, and the wheel reopens on the last page you had open. the partner halves of the paired emotes aren't on the wheel, you only get those by joining. selecting an entry passes its catalog ID to the normal play command, so the wheel and console use the same relay path. orange justice uses `emote_oj`, with `oj` and `orangejustice` aliases.
 
 wheel textures and RUI assets live under the mod's `paks` and `mod/resource` content. changing the artwork doesn't require changing the relay protocol.
 

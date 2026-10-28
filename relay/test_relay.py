@@ -1,6 +1,5 @@
 import json, threading, time, unittest, urllib.request, urllib.error
-from relay import Room, Server, EMOTES, TRAVERSAL
-from identity import Sessions
+from relay import Room, Server, EMOTES, TRAVERSAL, PAIRS, JOINS
 
 
 class Tests(unittest.TestCase):
@@ -19,7 +18,58 @@ class Tests(unittest.TestCase):
             if emote not in TRAVERSAL:
                 with self.assertRaises(ValueError):
                     room.sync(dict(data, traversal=True))
-        self.assertEqual(len(EMOTES), 16)
+        # the original 16 stay accepted for older clients
+        self.assertGreaterEqual(len(EMOTES), 16)
+        self.assertTrue({"emote_laugh", "emote_worm", "griddy_traversal"} <= set(EMOTES))
+        self.assertTrue(set(TRAVERSAL) <= set(EMOTES))
+        self.assertTrue(set(PAIRS) | set(PAIRS.values()) | set(JOINS) | set(JOINS.values()) <= set(EMOTES))
+
+    def test_paired_partner_shares_the_leaders_timing(self):
+        clock = [100.0]
+        r = Room(lambda: clock[0])
+        r.sync(dict(uid="111", map="mp_colony", nonce="a", emote="emote_lastforever"))
+        clock[0] += 3
+        code, body = r.sync(dict(uid="222", map="mp_colony", nonce="b", emote="emote_lastforever_b",
+                                 sync_uid="111", sync_nonce="a"))
+        peers = {p["uid"]: p for p in body["peers"]}
+        self.assertEqual(code, 200)
+        self.assertEqual(peers["222"]["age"], peers["111"]["age"])
+        self.assertEqual(peers["222"]["timeline"], peers["111"]["timeline"] + "-p")
+        self.assertFalse(peers["222"]["music"])
+        clock[0] += 1
+        code, _ = r.sync(dict(uid="333", map="mp_colony", nonce="c", emote="emote_robot",
+                              sync_uid="111", sync_nonce="a"))
+        self.assertEqual(code, 409)
+
+    def test_locked_facing_is_shared_and_checked(self):
+        clock = [100.0]
+        r = Room(lambda: clock[0])
+        a = dict(uid="111", map="mp_colony", nonce="a", emote="emote_robot")
+        self.assertIsNone(r.sync(a)[1]["peers"][0]["yaw"])
+        clock[0] += 1
+        self.assertEqual(r.sync(dict(a, yaw=91.26))[1]["peers"][0]["yaw"], 91.3)
+        clock[0] += 1
+        self.assertIsNone(r.sync(a)[1]["peers"][0]["yaw"])  # unlocked again
+        for bad in (True, "90", float("nan"), 1e9):
+            clock[0] += 1
+            with self.assertRaises(ValueError):
+                r.sync(dict(a, yaw=bad))
+
+    def test_join_starts_when_joining_and_links_to_the_leader(self):
+        clock = [100.0]
+        r = Room(lambda: clock[0])
+        r.sync(dict(uid="111", map="mp_colony", nonce="a", emote="emote_patpat"))
+        clock[0] += 5
+        code, body = r.sync(dict(uid="222", map="mp_colony", nonce="b", emote="emote_patpat_b",
+                                 sync_uid="111", sync_nonce="a"))
+        peers = {p["uid"]: p for p in body["peers"]}
+        self.assertEqual(code, 200)
+        self.assertEqual(peers["222"]["age"], 0)
+        self.assertEqual(peers["222"]["timeline"], peers["111"]["timeline"] + "-j")
+        clock[0] += 1
+        joined = r.sync(dict(uid="222", map="mp_colony", nonce="b", emote="emote_patpat_b",
+                             sync_uid="111", sync_nonce="a"))[1]
+        self.assertEqual({p["uid"]: p["age"] for p in joined["peers"]}["222"], 1)
 
     def test_griddy_traversal_and_legacy_client(self):
         clock = [100.0]
@@ -56,25 +106,20 @@ class Tests(unittest.TestCase):
 
     def test_all_emotes_over_http_to_second_peer(self):
         srv = Server(("127.0.0.1", 0), "test-secret")
-        srv.sessions = Sessions(verifier=lambda uid, code: None)
         thread = threading.Thread(target=srv.serve_forever, daemon=True)
         thread.start()
         try:
             url = f"http://127.0.0.1:{srv.server_port}/sync"
 
-            tokens = {}
             def post(data):
-                data = dict(data)
-                uid = data.pop("uid")
-                if uid not in tokens:
-                    tokens[uid] = srv.sessions.authenticate({"uid":uid,"code":"test-code-"+uid})["token"]
                 req = urllib.request.Request(
-                    url, json.dumps(data).encode(), {"Authorization": "Bearer "+tokens[uid]}
+                    url, json.dumps(data).encode(), {"Authorization": "Bearer test-secret"}
                 )
                 return json.load(urllib.request.urlopen(req))
 
-            for i, emote in enumerate(EMOTES):
-                uid = str(100 + i)
+            # one dancer switching emotes: a uid per emote would fill the room
+            uid = "100"
+            for emote in EMOTES:
                 post(
                     dict(
                         uid=uid,
@@ -97,12 +142,11 @@ class Tests(unittest.TestCase):
 
     def test_http_auth_and_invalid_input(self):
         srv = Server(("127.0.0.1", 0), "test-secret")
-        srv.sessions = Sessions(verifier=lambda uid, code: None)
         thread = threading.Thread(target=srv.serve_forever, daemon=True)
         thread.start()
         try:
             url = f"http://127.0.0.1:{srv.server_port}/sync"
-            token = srv.sessions.authenticate({"uid":"123","code":"test-code-http"})["token"]
+            token = "test-secret"
             for body, key, expected in [
                 (b"{}", "bad", 401),
                 (b"[]", token, 400),
@@ -113,7 +157,7 @@ class Tests(unittest.TestCase):
                     urllib.request.urlopen(req)
                 self.assertEqual(error.exception.code, expected)
             data = json.dumps(
-                dict(map="mp_colony", nonce="one", emote="bbd_traversal")
+                dict(uid="123", map="mp_colony", nonce="one", emote="bbd_traversal")
             ).encode()
             req = urllib.request.Request(url, data, {"Authorization": "Bearer "+token})
             self.assertEqual(

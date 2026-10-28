@@ -1,5 +1,9 @@
-// play the local wav files; nothing here downloads or streams music.
+// play the local wav/m4a files; nothing here downloads or streams music.
+#include "emote_m4a.h"
 #include <mmsystem.h>
+#include <cctype>
+#include <cstdio>
+#include <cstring>
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -30,10 +34,21 @@ struct ActiveVoice
 static SRWLOCK playbackLock = SRWLOCK_INIT;
 static PlaybackSnapshot pendingPlayback;
 #include "emote_catalog.h"
-static std::vector<short> tracks[TrackCount];
+// Built-in tracks come first. Emotes added later list their WAVs in
+// ceaikaemotes\tracks.txt, numbered from TrackCount in file order, so new
+// music doesn't need a DLL rebuild. "once" marks a one-shot intro.
+constexpr int MaxTracks = 64;
+static std::vector<short> tracks[MaxTracks];
+static int extraRates[MaxTracks]{};
+static bool trackOnce[MaxTracks]{};
+static volatile LONG trackCount = TrackCount, extraFailed = 0;
 static const std::vector<short> &GetTrackSamples(int id)
 {
     return tracks[id];
+}
+static int TrackRate(int id)
+{
+    return id < TrackCount ? TrackRates[id] : extraRates[id];
 }
 static ActiveVoice voices[MaxMusicVoices];
 static HANDLE worker = nullptr;
@@ -78,7 +93,7 @@ static bool ParseRequest(const char *raw, PlaybackSnapshot &out)
                 return false;
             used += extra;
         }
-        if (r.track < 0 || r.track >= TrackCount)
+        if (r.track < 0 || r.track >= trackCount)
             return false;
         if (r.id < 1 || r.id > 8191 || !std::isfinite(r.age) || r.age < 0 || r.age > 3600 ||
             !std::isfinite(r.gain) || !std::isfinite(r.pan) || r.gain < 0 || r.gain > 1 || r.pan < -1 ||
@@ -123,7 +138,26 @@ static void SubmitRequest(const char *raw)
     if (next.count && wakeEvent && InterlockedCompareExchange(&sleeping, 0, 0))
         SetEvent(wakeEvent);
 }
-static bool LoadTrack(HMODULE self, const wchar_t *name, std::vector<short> &pcm, int rate)
+// no wav? releases ship the music as .m4a with the same name (emote_m4a.h),
+// wavs still win so a freshly ported emote works before anyone encodes it
+static bool LoadM4a(wchar_t *path, std::vector<short> &pcm, int &rate)
+{
+    size_t n = wcslen(path);
+    if (n < 4 || _wcsicmp(path + n - 4, L".wav"))
+        return false;
+    wcscpy(path + n - 4, L".m4a");
+    int fileRate = 0;
+    // same 32 MB cap as a wav
+    if (!EmoteM4a::Decode(path, pcm, fileRate) || (rate && fileRate != rate) || pcm.size() >= 16000000)
+    {
+        pcm.clear();
+        return false;
+    }
+    rate = fileRate;
+    return true;
+}
+// rate 0 accepts the file's own rate and returns it.
+static bool LoadTrack(HMODULE self, const wchar_t *name, std::vector<short> &pcm, int &rate)
 {
     wchar_t path[32768];
     DWORD n = GetModuleFileNameW(self, path, 32768);
@@ -135,15 +169,19 @@ static bool LoadTrack(HMODULE self, const wchar_t *name, std::vector<short> &pcm
     wcscpy(slash + 1, name);
     FILE *f = _wfopen(path, L"rb");
     if (!f)
-        return false;
+        return LoadM4a(path, pcm, rate);
     unsigned char head[44]{};
     bool ok = fread(head, 1, 44, f) == 44;
     auto u16 = [&](int i) { return unsigned(head[i]) | (unsigned(head[i + 1]) << 8); };
     auto u32 = [&](int i) { return u16(i) | (u16(i + 2) << 16); };
     unsigned bytes = u32(40);
+    unsigned fileRate = u32(24);
     ok = ok && !memcmp(head, "RIFF", 4) && !memcmp(head + 8, "WAVEfmt ", 8) &&
          !memcmp(head + 36, "data", 4) && u32(16) == 16 && u16(20) == 1 && u16(22) == 2 &&
-         u32(24) == unsigned(rate) && u16(34) == 16 && bytes > 4 && bytes < 32000000 && bytes % 4 == 0;
+         (rate ? fileRate == unsigned(rate) : fileRate >= 8000 && fileRate <= 96000) && u16(34) == 16 &&
+         bytes > 4 && bytes < 32000000 && bytes % 4 == 0;
+    if (ok)
+        rate = int(fileRate);
     if (ok)
     {
         pcm.resize(bytes / 2);
@@ -154,11 +192,131 @@ static bool LoadTrack(HMODULE self, const wchar_t *name, std::vector<short> &pcm
         pcm.clear();
     return ok;
 }
+// One "<file>.wav [once]" per line; '#' starts a comment. Names are plain
+// files inside the ceaikaemotes folder. A line that fails to load still keeps
+// its number, so later tracks stay where the catalog expects them.
+static int ParseTrackList(const char *text, char names[][64], bool *once, int max)
+{
+    int count = 0;
+    while (*text && count < max)
+    {
+        const char *end = strchr(text, '\n');
+        size_t length = end ? size_t(end - text) : strlen(text);
+        char line[128]{};
+        memcpy(line, text, std::min(length, sizeof(line) - 1));
+        text += length + (end ? 1 : 0);
+        if (char *hash = strchr(line, '#'))
+            *hash = 0;
+        char name[96]{}, flag[16]{};
+        int fields = sscanf(line, "%95s %15s", name, flag);
+        if (fields < 1)
+            continue;
+        size_t n = strlen(name);
+        bool valid = n > 4 && n < 64 && !_stricmp(name + n - 4, ".wav");
+        for (size_t i = 0; valid && i < n; i++)
+            valid = isalnum(static_cast<unsigned char>(name[i])) || strchr("_-.", name[i]);
+        strcpy(names[count], valid ? name : "");
+        once[count] = fields == 2 && !strcmp(flag, "once");
+        ++count;
+    }
+    return count;
+}
+// every track to load, built-in and tracks.txt ones
+struct LoadJob
+{
+    int id = 0, rate = 0;
+    wchar_t file[96]{};
+    bool loaded = false;
+};
+static LoadJob loadJobs[MaxTracks];
+static int loadJobCount = 0;
+static volatile LONG nextLoadJob = 0;
+static HMODULE loadModule = nullptr;
+static void AddLoadJob(int id, const wchar_t *file, int rate)
+{
+    LoadJob &job = loadJobs[loadJobCount++];
+    job.id = id;
+    job.rate = rate;
+    wcsncpy(job.file, file, 95);
+}
+static DWORD WINAPI RunLoadJobs(void *)
+{
+    for (LONG i; (i = InterlockedIncrement(&nextLoadJob) - 1) < loadJobCount;)
+    {
+        LoadJob &job = loadJobs[i];
+        job.loaded = LoadTrack(loadModule, job.file, tracks[job.id], job.rate);
+    }
+    return 0;
+}
+static int QueueExtraTracks(HMODULE self)
+{
+    wchar_t path[32768];
+    DWORD n = GetModuleFileNameW(self, path, 32768);
+    wchar_t *slash = n && n < 32700 ? wcsrchr(path, L'\\') : nullptr;
+    if (!slash)
+        return 0;
+    wcscpy(slash + 1, L"ceaikaemotes\\tracks.txt");
+    FILE *f = _wfopen(path, L"rb");
+    if (!f)
+        return 0;
+    char text[8192]{};
+    fread(text, 1, sizeof(text) - 1, f);
+    fclose(f);
+    char names[MaxTracks - TrackCount][64]{};
+    bool once[MaxTracks - TrackCount]{};
+    int count = ParseTrackList(text, names, once, MaxTracks - TrackCount);
+    for (int i = 0; i < count; i++)
+    {
+        int id = TrackCount + i;
+        trackOnce[id] = once[i];
+        if (!names[i][0])
+        {
+            InterlockedIncrement(&extraFailed);
+            continue;
+        }
+        wchar_t file[96] = L"ceaikaemotes\\";
+        size_t prefix = wcslen(file);
+        for (size_t k = 0; names[i][k]; k++)
+            file[prefix + k] = wchar_t(names[i][k]);
+        AddLoadJob(id, file, 0);
+    }
+    return count;
+}
+// decoding all the m4a music is ~1.3s on one core, so 4 threads split it.
+// also keeps COM/media foundation setup on threads we own instead of northstar's
 static bool LoadMusicFiles(HMODULE self)
 {
+    loadJobCount = 0;
+    nextLoadJob = 0;
+    loadModule = self;
     for (int i = 0; i < TrackCount; i++)
-        if (!LoadTrack(self, TrackFiles[i], tracks[i], TrackRates[i]))
-            return false;
+        if (TrackFiles[i])
+            AddLoadJob(i, TrackFiles[i], TrackRates[i]);
+    int builtIn = loadJobCount;
+    int extras = QueueExtraTracks(self);
+    HANDLE threads[4]{};
+    DWORD started = 0;
+    for (HANDLE &thread : threads)
+        if ((thread = CreateThread(nullptr, 0, RunLoadJobs, nullptr, 0, nullptr)))
+            started++;
+        else
+            break;
+    if (started)
+        WaitForMultipleObjects(started, threads, TRUE, INFINITE);
+    else
+        RunLoadJobs(nullptr);
+    for (DWORD i = 0; i < started; i++)
+        CloseHandle(threads[i]);
+    for (int i = 0; i < loadJobCount; i++)
+    {
+        if (i < builtIn && !loadJobs[i].loaded)
+            return false; // the original music not loading means the install is broken
+        if (i >= builtIn && loadJobs[i].loaded)
+            extraRates[loadJobs[i].id] = loadJobs[i].rate;
+        else if (i >= builtIn)
+            InterlockedIncrement(&extraFailed);
+    }
+    InterlockedExchange(&trackCount, TrackCount + extras);
     return true;
 }
 static void MixBuffer(
@@ -176,6 +334,10 @@ static void MixBuffer(
         if (GetTrackSamples(req.track).empty())
             continue;
         double trackFrames = GetTrackSamples(req.track).size() / 2;
+        double elapsed = (req.age + double(now - state.stamp) / 1000. + queued) * TrackRate(req.track);
+        // A finished one-shot stays silent instead of starting over.
+        if (trackOnce[req.track] && elapsed >= trackFrames)
+            continue;
         int slot = -1;
         for (int i = 0; i < MaxMusicVoices; i++)
             if (voices[i].id == req.id)
@@ -194,11 +356,10 @@ static void MixBuffer(
         if (slot < 0)
             continue;
         ActiveVoice &v = voices[slot];
-        double desired =
-            fmod((req.age + double(now - state.stamp) / 1000. + queued) * TrackRates[req.track], trackFrames);
+        double desired = fmod(elapsed, trackFrames);
         double error = fabs(v.position - desired);
         error = std::min(error, trackFrames - error);
-        if (fresh || v.track != req.track || error > TrackRates[req.track] * .18)
+        if (fresh || v.track != req.track || error > TrackRate(req.track) * .18)
         {
             v.position = desired;
             v.left = v.right = 0;
@@ -241,14 +402,21 @@ static void MixBuffer(
                     left = right = (left + right) * .5f;
                 // fade the loop edges a bit so they dont click.
                 float edge = Clamp(
-                    float(std::min(v.position, trackFrames - 1 - v.position) / (TrackRates[v.track] * .005)),
+                    float(std::min(v.position, trackFrames - 1 - v.position) / (TrackRate(v.track) * .005)),
                     0,
                     1);
                 l += left * v.left * edge;
                 r += right * v.right * edge;
-                v.position += double(TrackRates[v.track]) / OutputSampleRate;
+                v.position += double(TrackRate(v.track)) / OutputSampleRate;
                 if (v.position >= trackFrames)
+                {
+                    if (trackOnce[v.track])
+                    {
+                        v = {};
+                        continue;
+                    }
                     v.position -= trackFrames;
+                }
             }
         output[f * 2] = short(Clamp(l * normalization, -32767, 32767));
         output[f * 2 + 1] = short(Clamp(r * normalization, -32767, 32767));

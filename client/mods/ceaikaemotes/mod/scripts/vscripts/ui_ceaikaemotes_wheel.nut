@@ -20,13 +20,16 @@ void function CeaikaEmotes_Settings()
 {
     ModSettings_AddModTitle("ceaikaemotes")
     ModSettings_AddModCategory("Emote wheel controls")
-    ModSettings_AddEnumSetting("em_wheel_key", "Hold to open emote wheel", ["Unbound", "B", "G", "H", "J"])
+    ModSettings_AddSetting("em_wheel_bind", "Hold to open emote wheel (type a key, e.g. B)")
     ModSettings_AddEnumSetting("em_wheel_pad", "Hold controller emote wheel", ["Unbound", "D-pad Down"])
-    ModSettings_AddEnumSetting("em_traversal", "Billy Bounce / Griddy movement", ["Stationary", "Traversal"])
+    ModSettings_AddEnumSetting("em_traversal", "Traversal emote movement", ["Stationary", "Traversal"])
+    ModSettings_AddModCategory("Join another dancer")
+    ModSettings_AddSetting("em_sync_bind", "Hold to sync or join (type a key, e.g. H)")
+    ModSettings_AddModCategory("While emoting")
+    ModSettings_AddSetting("em_freelook_bind", "Hold to look around while emoting (e.g. SHIFT)")
+    ModSettings_AddEnumSetting("em_freelook_invert", "Invert up/down while looking around", ["Off", "On"])
     ModSettings_AddModCategory("Online emotes")
     ModSettings_AddEnumSetting("em_enabled", "Online emotes", ["Off", "On"])
-    ModSettings_AddButton("Review relay permission", CeaikaEmotes_ShowAuthDialog)
-    ModSettings_AddButton("Forget relay permission", CeaikaEmotes_ForgetRelay)
 }
 int function CeaikaEmotes_Sector(float x, float y)
 {
@@ -69,15 +72,16 @@ void function CeaikaEmotes_InitWheel()
 }
 void function CeaikaEmotes_OpenWheel(int holdKey = -1)
 {
-    if ( !CanRunClientScript() || CeaikaEmotes_Catalog().len() == 0) return
+    if ( !CanRunClientScript() || CeaikaEmotes_Listed().len() == 0) return
     if ( GetTopNonDialogMenu() == file.menu) return
-    file.page = 0
+    // reopen on the page u left it on
+    if ( file.page >= (CeaikaEmotes_Listed().len()+7)/8) file.page = 0
     file.holdKey = holdKey
     file.selected = -1
     AdvanceMenu(file.menu)
     file.generation++
     thread CeaikaEmotes_Hold(file.generation)
-    print("[EmoteRelay] radial wheel opened with "+CeaikaEmotes_Catalog().len()+" names")
+    print("[EmoteRelay] radial wheel opened with "+CeaikaEmotes_Listed().len()+" names")
 }
 void function CeaikaEmotes_CloseWheel()
 {
@@ -97,7 +101,7 @@ void function CeaikaEmotes_ScrollWheel(int eventType, int tick, int input, int v
 
 void function CeaikaEmotes_ChangePage(int direction)
 {
-    int pages = (CeaikaEmotes_Catalog().len()+7)/8
+    int pages = (CeaikaEmotes_Listed().len()+7)/8
     if(pages < 2) return
     file.page = (file.page+pages+direction)%pages
     file.selected = -1
@@ -158,7 +162,7 @@ void function CeaikaEmotes_DrawWheel()
         Hud_SetPos(label, int(width*0.5+cos(angle)*size*0.34-Hud_GetWidth(label)*0.5), int(height*0.5+sin(angle)*size*0.34-Hud_GetHeight(label)*0.5))
         Hud_SetEnabled(label, true)
         Hud_SetColor(label, 255, 255, 255, 255)
-        Hud_SetText(label, index<CeaikaEmotes_Catalog().len() ? CeaikaEmotes_Catalog()[index].title : "")
+        Hud_SetText(label, index<CeaikaEmotes_Listed().len() ? CeaikaEmotes_Listed()[index].title : "")
     }
     foreach(string name in ["Selected", "Page"])
     {
@@ -167,25 +171,25 @@ void function CeaikaEmotes_DrawWheel()
         Hud_SetColor(label, 255, 255, 255, 255)
     }
     Hud_SetText(Hud_GetChild(file.menu, "Title"), "EMOTES")
-    Hud_SetText(Hud_GetChild(file.menu, "Page"), (file.page+1)+" / "+((CeaikaEmotes_Catalog().len()+7)/8))
+    Hud_SetText(Hud_GetChild(file.menu, "Page"), (file.page+1)+" / "+((CeaikaEmotes_Listed().len()+7)/8))
     Hud_Hide(Hud_GetChild(file.menu, "Hint"))
     CeaikaEmotes_Hover(-1)
 }
 void function CeaikaEmotes_Hover(int slot)
 {
     if ( GetTopNonDialogMenu() != file.menu) return
-    file.selected = slot >= 0 && file.page*8+slot<CeaikaEmotes_Catalog().len() ? slot : -1
+    file.selected = slot >= 0 && file.page*8+slot<CeaikaEmotes_Listed().len() ? slot : -1
     var highlight = Hud_GetRui(Hud_GetChild(file.menu, "Highlight"))
     RuiSetFloat(highlight, "basicImageAlpha", file.selected >= 0 ? 1.0 : 0.0)
     array<asset> sectors = [$"rui/ceaika_emotes/sector_0", $"rui/ceaika_emotes/sector_1", $"rui/ceaika_emotes/sector_2", $"rui/ceaika_emotes/sector_3", $"rui/ceaika_emotes/sector_4", $"rui/ceaika_emotes/sector_5", $"rui/ceaika_emotes/sector_6", $"rui/ceaika_emotes/sector_7"]
     if ( file.selected >= 0) RuiSetImage(highlight, "basicImage", sectors[file.selected])
-    Hud_SetText(Hud_GetChild(file.menu, "Selected"), file.selected >= 0 ? CeaikaEmotes_Catalog()[file.page*8+file.selected].title : "EMOTES")
+    Hud_SetText(Hud_GetChild(file.menu, "Selected"), file.selected >= 0 ? CeaikaEmotes_Listed()[file.page*8+file.selected].title : "EMOTES")
 }
 void function CeaikaEmotes_Choose()
 {
     int index = file.selected<0 ? -1 : file.page*8+file.selected
     CeaikaEmotes_CloseWheel()
-    if ( index >= 0 && index<CeaikaEmotes_Catalog().len() && CanRunClientScript())
-    RunClientScript("CeaikaEmotes_Select", CeaikaEmotes_Catalog()[index].id)
+    if ( index >= 0 && index<CeaikaEmotes_Listed().len() && CanRunClientScript())
+    RunClientScript("CeaikaEmotes_Select", CeaikaEmotes_Listed()[index].id)
 }
 

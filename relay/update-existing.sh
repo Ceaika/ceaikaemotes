@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# This switches sync to verified sessions. Older clients will receive 401.
+# This restores UID-only sync with the shared room key; UIDs are unverified.
 source_dir=$(cd -- "$(dirname -- "$0")" && pwd)
 target_dir=${1:-"$HOME/emote-relay-prototype"}
 target_dir=$(cd -- "$target_dir" && pwd)
@@ -11,7 +11,7 @@ test -f "$target_dir/relay.py"
 
 # test before touching the running copy.
 python3 -m unittest discover -s "$source_dir" -v
-backup_dir=$(mktemp -d "$target_dir/before-0.3.0.XXXXXX")
+backup_dir=$(mktemp -d "$target_dir/before-0.5.1.XXXXXX")
 cp -p "$target_dir/relay.py" "$backup_dir/relay.py"
 if test -f "$target_dir/identity.py"; then cp -p "$target_dir/identity.py" "$backup_dir/identity.py"; fi
 if test -f "$target_dir/limits.yaml"; then
@@ -41,7 +41,7 @@ rollback() {
 trap rollback ERR
 
 cp "$source_dir/relay.py" "$target_dir/relay.py"
-cp "$source_dir/identity.py" "$target_dir/identity.py"
+
 cp "$source_dir/limits.yaml" "$target_dir/limits.yaml"
 cd "$target_dir"
 docker compose -p emote-relay-prototype -f compose.yaml -f limits.yaml config --quiet
@@ -56,8 +56,8 @@ import urllib.request
 for attempt in range(15):
     try:
         with urllib.request.urlopen('http://127.0.0.1:8766/health', timeout=3) as reply:
-            if json.load(reply).get('version') == '0.3.0':
-                print('Relay 0.3.0 is healthy.')
+            if json.load(reply).get('version') == '0.5.1':
+                print('Relay 0.5.1 is healthy.')
                 break
     except (OSError, ValueError):
         pass

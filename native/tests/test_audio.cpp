@@ -110,7 +110,56 @@ int main()
             .25 * TrackRates[track] + FramesPerBuffer * double(TrackRates[track]) / OutputSampleRate;
         assert(fabs(voices[0].position - expected) < .001);
     }
+    // tracks.txt: comments and blanks skipped, unsafe names keep their number.
+    char names[8][64]{};
+    bool once[8]{};
+    int listed = ParseTrackList(
+        "loop_a.wav\r\n# note\n\nintro_a.wav once\n..\\evil.wav\nloop_b.wav  # trailing\n", names, once, 8);
+    assert(listed == 4 && !strcmp(names[0], "loop_a.wav") && !once[0]);
+    assert(!strcmp(names[1], "intro_a.wav") && once[1]);
+    assert(names[2][0] == 0 && !strcmp(names[3], "loop_b.wav"));
+    // Requests are limited to the tracks this DLL actually has.
+    PlaybackSnapshot extra;
+    assert(!ParseRequest("20:1,.1,.5,0,1,16", extra));
+    trackCount = TrackCount + 2;
+    assert(ParseRequest("21:1,.1,.5,0,1,17", extra));
+    assert(!ParseRequest("22:1,.1,.5,0,1,18", extra));
+    // A one-shot plays, then stays silent instead of wrapping to its start.
+    for (auto &v : voices)
+        v = {};
+    tracks[TrackCount].assign(OutputSampleRate / 4 * 2, short(9000));
+    extraRates[TrackCount] = OutputSampleRate;
+    trackOnce[TrackCount] = true;
+    PlaybackSnapshot intro;
+    char request[64];
+    snprintf(request, sizeof(request), "30:1,.1,.5,0,1,%d", TrackCount);
+    assert(ParseRequest(request, intro));
+    intro.stamp = 6000;
+    for (int i = 0; i < 3; i++)
+        MixBuffer(out, FramesPerBuffer, intro, 6000);
+    assert(voices[0].id == 1 && energy(out, 0) > 0);
+    // 5 ms before the end: the voice finishes inside this buffer.
+    for (auto &v : voices)
+        v = {};
+    intro.items[0].age = .245;
+    MixBuffer(out, FramesPerBuffer, intro, 6000);
+    assert(voices[0].id == 0);
+    // Later frames of the same request are past the end and stay silent.
+    for (int i = 1; i <= 5; i++)
+    {
+        MixBuffer(out, FramesPerBuffer, intro, 6000 + i * 100);
+        assert(voices[0].id == 0 && energy(out, 0) == 0);
+    }
+    // Extra tracks keep their own sample rate.
+    tracks[TrackCount + 1].assign(44100 * 2, short(2000));
+    extraRates[TrackCount + 1] = 44100;
+    PlaybackSnapshot loop;
+    snprintf(request, sizeof(request), "31:1,.25,.5,0,1,%d", TrackCount + 1);
+    assert(ParseRequest(request, loop));
+    loop.stamp = 7000;
+    MixBuffer(out, FramesPerBuffer, loop, 7000);
+    assert(fabs(voices[0].position - (.25 * 44100 + FramesPerBuffer * 44100. / OutputSampleRate)) < .001);
     ClearRequests();
     puts("Audio tests passed: validation, phase, panning, stereo, looping, timeout, voice limit, track "
-         "selection/switching.");
+         "selection/switching, track list, one-shot intros, extra track rates.");
 }

@@ -1,0 +1,25 @@
+# extra emote sounds; line N is track 16+N. "once" plays a one-shot intro.
+emote_voidredemption.wav
+emote_voidredemption_intro.wav once
+emote_epicsaxguy.wav
+emote_epicsaxguy_intro.wav once
+emote_sad_trombone.wav once
+emote_alors.wav
+emote_boogiedown.wav
+emote_boogiedown_intro.wav once
+emote_breakin.wav
+emote_downward.wav
+emote_fireball.wav
+emote_flamenco.wav
+emote_flamenco_intro.wav once
+emote_freeflow.wav
+emote_freeflow_intro.wav once
+emote_gangnam.wav
+emote_macarena.wav
+emote_pompous.wav
+emote_pumpernickel.wav
+emote_robot.wav
+emote_rollie.wav
+emote_scenario.wav
+emote_lastforever.wav
+emote_patpat_intro.wav once

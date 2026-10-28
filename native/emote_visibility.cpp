@@ -180,7 +180,6 @@ static void SetDiagnosticValue(const char *name, int value)
     if (capacity > length && IsMemoryReadable(text, length + 1))
         memcpy(text, formatted, length + 1);
 }
-#include "emote_auth.h"
 
 static void *FindEntity(int index)
 {
@@ -243,20 +242,104 @@ struct HiddenEntity
 static HiddenEntity hiddenEntities[128];
 static char lastRenderRequest[2048]{};
 static ULONGLONG lastRenderHeartbeat = 0;
+static bool IsHiddenTable(void **table)
+{
+    for (auto &s : hiddenEntities)
+        if (s.active && table == s.shadow + 1)
+            return true;
+    return false;
+}
+// putting the functions back isnt enough after a crouch-jump: the engine may
+// have dropped the model from its render list while it was hidden, so it is
+// told to check visibility again. That check only keeps a model it can draw
+// right now. A pilot who stopped emoting by dying (or mid-embark) can't be
+// drawn at that moment, so the check removed them and nothing in the game
+// added them back on respawn: invisible until their next emote. Wait until
+// the model says it can be drawn, then check.
+struct PendingRefresh
+{
+    int index = 0;
+    void *entity = nullptr;
+    void *renderable = nullptr;
+    ULONGLONG until = 0;
+    bool active = false;
+};
+static PendingRefresh pendingRefreshes[128];
+static bool CanDraw(void *renderable)
+{
+    // Supported Ion IClientRenderable::ShouldDraw, the entry the hook replaces.
+    return GetVirtualFunction<bool (*)(void *)>(renderable, 3)(renderable);
+}
+static void UpdateEntityVisibility(void *entity)
+{
+    GetVirtualFunction<void (*)(void *)>(entity, 103)(entity); // Supported Ion C_BaseEntity::UpdateVisibility.
+}
+static void RefreshWhenDrawable(int index, void *entity, void *renderable)
+{
+    if (CanDraw(renderable))
+    {
+        UpdateEntityVisibility(entity);
+        return;
+    }
+    PendingRefresh *slot = nullptr;
+    for (auto &p : pendingRefreshes)
+        if (p.active && p.entity == entity)
+            slot = &p;
+    for (auto &p : pendingRefreshes)
+        if (!slot && !p.active)
+            slot = &p;
+    if (slot)
+        *slot = {index, entity, renderable, GetTickCount64() + 300000, true};
+}
+static void ServicePendingRefreshes()
+{
+    ULONGLONG now = GetTickCount64();
+    for (auto &p : pendingRefreshes)
+    {
+        if (!p.active)
+            continue;
+        // Same object, same renderable, not hidden again (that restore will
+        // schedule its own refresh). Respawning keeps the object; a replaced
+        // object is set up by the engine itself.
+        void *current = FindEntity(p.index);
+        if (now > p.until || current != p.entity || !IsMemoryReadable(current, 16) ||
+            GetVirtualFunction<void *(*)(void *)>(current, 4)(current) != p.renderable ||
+            !IsMemoryReadable(p.renderable, 8) || IsHiddenTable(*reinterpret_cast<void ***>(p.renderable)))
+        {
+            p.active = false;
+            continue;
+        }
+        if (CanDraw(p.renderable))
+        {
+            UpdateEntityVisibility(current);
+            p.active = false;
+        }
+    }
+}
+static void ClearPendingRefreshes()
+{
+    for (auto &p : pendingRefreshes)
+        p.active = false;
+}
 static void RestoreEntity(HiddenEntity &s)
 {
     if (!s.active)
         return;
     void *now = FindEntity(s.index);
-    if (now == s.entity && IsMemoryReadable(now, 16) && EntityHandle(now) == s.handle &&
+    // A live entity can receive a new handle without resetting its renderable.
+    // Remove our own hook even in that case, or the next hide can copy the
+    // hidden table as its "original" and leave the model permanently hidden.
+    // Resolve the renderable from the live entity; never dereference an old one.
+    if (now == s.entity && IsMemoryReadable(now, 16) &&
+        GetVirtualFunction<void *(*)(void *)>(now, 4)(now) == s.renderable &&
         IsMemoryReadable(s.renderable, 8))
     {
-        // putting the functions back isnt enough after a crouch-jump.
-        // tell the engine to check visibility again.
-        if (InterlockedCompareExchangePointer(
-                reinterpret_cast<PVOID volatile *>(s.renderable), s.original, s.shadow + 1) == s.shadow + 1)
-            GetVirtualFunction<void (*)(void *)>(now,
-                                                 103)(now); // Supported Ion C_BaseEntity::UpdateVisibility.
+        InterlockedCompareExchangePointer(reinterpret_cast<PVOID volatile *>(s.renderable), s.original, s.shadow + 1);
+        s.active = false;
+        // also when the engine had already reset the table: its cached
+        // visibility may still be from while the model was hidden
+        if (!IsHiddenTable(*reinterpret_cast<void ***>(s.renderable)))
+            RefreshWhenDrawable(s.index, now, s.renderable);
     }
     s.active = false;
 }
@@ -358,6 +441,14 @@ struct Plugin final : PluginCallbacks
                            &self);
         Log(EmoteAudio::StartWorker(self) ? "Proximity music worker started."
                                           : "Music file missing or invalid; proximity music disabled.");
+        char tracks[96];
+        snprintf(tracks,
+                 sizeof(tracks),
+                 "%ld music tracks (%ld from tracks.txt, %ld failed to load).",
+                 EmoteAudio::trackCount,
+                 EmoteAudio::trackCount - EmoteAudio::TrackCount,
+                 EmoteAudio::extraFailed);
+        Log(tracks);
     }
     void Finalize() override
     {
@@ -366,6 +457,7 @@ struct Plugin final : PluginCallbacks
     {
         EmoteAudio::ClearRequests();
         RestoreAllEntities();
+        ClearPendingRefreshes();
         Log("Restart Ion to unload visibility helper safely.");
         return false;
     }
@@ -378,6 +470,8 @@ struct Plugin final : PluginCallbacks
         nextIdlePollTime = 0;
         EmoteAudio::ClearRequests();
         RestoreAllEntities();
+        // the level's entities are going away with this VM
+        ClearPendingRefreshes();
     }
     void OnLibraryLoaded(HMODULE module, const char *name) override
     {
@@ -414,12 +508,15 @@ struct Plugin final : PluginCallbacks
         SetDiagnosticValue("em_audio_voices", EmoteAudio::playing);
         SetDiagnosticValue("em_audio_idle", EmoteAudio::sleeping);
         SetDiagnosticValue("em_audio_device", EmoteAudio::deviceOpen);
+        // scripts only request tracks this DLL has; older DLLs leave it at 0.
+        SetDiagnosticValue("em_audio_tracks", EmoteAudio::trackCount);
         if (!supportedClient || !entityList || !consoleVariables)
         {
             EmoteAudio::ClearRequests();
             return;
         }
-        EmoteAuth::Tick();
+        // before the early returns below: restores happen when nobody emotes too
+        ServicePendingRefreshes();
         const char *audio = ReadConVarString(FindConVar("em_audio_request"));
         if (audio && *audio)
             nextIdlePollTime = 0;

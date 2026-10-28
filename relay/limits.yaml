@@ -1,8 +1,6 @@
 # merge with the existing compose file, dont replace its proxy.
 services:
   relay:
-    volumes:
-      - ./identity.py:/app/identity.py:ro
     mem_limit: 128m
     cpus: 0.50
     pids_limit: 64

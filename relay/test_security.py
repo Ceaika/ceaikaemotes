@@ -4,14 +4,12 @@ import socket
 import threading
 import unittest
 from relay import RequestBudget, Room, Server
-from identity import Sessions
 
 
 class RelaySecurityTests(unittest.TestCase):
     def setUp(self):
         self.server = Server(("127.0.0.1", 0), "test-secret")
-        self.server.sessions = Sessions(verifier=lambda uid, code: None)
-        self.token = self.server.sessions.authenticate({"uid":"123", "code":"test-code-security"})["token"]
+        self.token = "test-secret"
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
 
@@ -39,7 +37,7 @@ class RelaySecurityTests(unittest.TestCase):
         self.assertEqual(self.request("CONNECT", "/sync")[0], 405)
 
     def test_only_known_fields_and_emotes(self):
-        event = dict(map="mp_colony", nonce="one", emote="emote_oj")
+        event = dict(uid="123", map="mp_colony", nonce="one", emote="emote_oj")
         for invalid in (
             dict(event, command="whoami"),
             dict(event, filename="room.key"),

@@ -1,6 +1,6 @@
 {
     "Name": "ceaikaemotes",
-    "Version": "0.3.0",
+    "Version": "0.5.5",
     "LoadPriority": 30,
     "RequiredOnClient": false,
     "Description": "experimental lol",
@@ -36,10 +36,17 @@
             }
         },
         {
-            "Path": "ui_ceaikaemotes_auth.nut",
-            "RunOn": "UI",
-            "UICallback": {
-                "After": "CeaikaEmotes_AuthUIInit"
+            "Path": "cl_ceaikaemotes_interact.nut",
+            "RunOn": "CLIENT && MP",
+            "ClientCallback": {
+                "After": "CeaikaEmotes_InteractInit"
+            }
+        },
+        {
+            "Path": "cl_ceaikaemotes_selftest.nut",
+            "RunOn": "CLIENT && MP",
+            "ClientCallback": {
+                "After": "CeaikaEmotes_SelfTestInit"
             }
         }
     ],
@@ -74,6 +81,10 @@
             "DefaultValue": "0000"
         },
         {
+            "Name": "em_audio_tracks",
+            "DefaultValue": "0"
+        },
+        {
             "Name": "em_audio_device",
             "DefaultValue": "0000"
         },
@@ -102,11 +113,6 @@
             "DefaultValue": "0"
         },
         {
-            "Name": "em_wheel_key",
-            "DefaultValue": "1",
-            "Flags": "ARCHIVE_PLAYERPROFILE"
-        },
-        {
             "Name": "em_wheel_pad",
             "DefaultValue": "0",
             "Flags": "ARCHIVE_PLAYERPROFILE"
@@ -117,21 +123,33 @@
             "Flags": "ARCHIVE_PLAYERPROFILE"
         },
         {
-            "Name": "em_auth_state",
-            "DefaultValue": "0000"
+            "Name": "em_wheel_bind",
+            "DefaultValue": "B",
+            "Flags": "ARCHIVE_PLAYERPROFILE"
         },
         {
-            "Name": "em_auth_request",
-            "DefaultValue": ""
+            "Name": "em_sync_bind",
+            "DefaultValue": "H",
+            "Flags": "ARCHIVE_PLAYERPROFILE"
         },
         {
-            "Name": "em_auth_allowed_url",
+            "Name": "em_freelook_bind",
+            "DefaultValue": "SHIFT",
+            "Flags": "ARCHIVE_PLAYERPROFILE"
+        },
+        {
+            "Name": "em_freelook_invert",
+            "DefaultValue": "0",
+            "Flags": "ARCHIVE_PLAYERPROFILE"
+        },
+        {
+            "Name": "em_saved_mouse",
             "DefaultValue": "",
             "Flags": "ARCHIVE_PLAYERPROFILE"
         },
         {
-            "Name": "em_auth_session",
-            "DefaultValue": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+            "Name": "em_selftest",
+            "DefaultValue": ""
         }
     ],
     "ConCommands": [
@@ -166,13 +184,13 @@
             "Context": "CLIENT"
         },
         {
-            "Name": "em_auth_accept",
-            "Function": "CeaikaEmotes_AuthAccept",
+            "Name": "em_propdebug",
+            "Function": "CeaikaEmotes_PropDebug",
             "Context": "CLIENT"
         },
         {
-            "Name": "em_auth_revoke",
-            "Function": "CeaikaEmotes_AuthRevoke",
+            "Name": "em_pairtest",
+            "Function": "CeaikaEmotes_PairTest",
             "Context": "CLIENT"
         }
     ]
