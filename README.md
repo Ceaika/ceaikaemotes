@@ -2,7 +2,7 @@
 
 ok so basically this lets you emote with other people who have the mod, without needing the game server to install it. there's 33 emotes for pilots and titans, two of them paired so a friend can dance with you, props like a sax and a trombone, the wheel from party pack, music that gets quieter as you walk away, and a few emotes you can walk around with.
 
-| dancing | props | walking emotes |
+| mystery | phone it in | funny griddy |
 | --- | --- | --- |
 | ![dancing](https://raw.githubusercontent.com/Ceaika/ceaikaemotes/main/docs/media/dance.gif) | ![phone it in with the sax](https://raw.githubusercontent.com/Ceaika/ceaikaemotes/main/docs/media/prop.gif) | ![a walking emote](https://raw.githubusercontent.com/Ceaika/ceaikaemotes/main/docs/media/traversal.gif) |
 
