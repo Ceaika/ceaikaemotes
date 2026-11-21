@@ -18,9 +18,9 @@ close the game first. **delete your old ceaikaemotes first**, 0.5.5 got rid of a
 
 then from the client zip, put `mods/ceaikaemotes` in `R2Northstar/mods`, and put the contents of `plugins` in `R2Northstar/plugins`. the music folder goes next to the DLL, don't leave it behind.
 
-if you install it as a Northstar package instead, keep the whole package together under `R2Northstar/packages/<package name>`. don't also install a second manual copy. the DLL uses Windows audio, so this is Windows only; Linux/Wine hasn't been checked.
+if you install it as a Northstar package instead, keep the whole package together under `R2Northstar/packages/<package name>`. don't also install a second manual copy.
 
-the music is `.m4a` now, which Windows plays through Media Foundation. normal Windows 10/11 has it. Windows "N" editions need Microsoft's free Media Feature Pack, otherwise the emotes still work but there's no music.
+the music is `.m4a` now, which Windows plays through Media Foundation. normal Windows 10/11 has it. Windows "N" editions need Microsoft's free Media Feature Pack. See [Limitations](#limitations) for running without Media Feature Pack or on Linux.
 
 ## using it
 
@@ -76,7 +76,9 @@ to keep the overhead down, idle music closes its audio device and the DLL polls 
 
 ## limitations
 
-music doesn't get muffled by walls, and the dancing model doesn't change the server's hitbox. the DLL depends on a supported engine build. another mod replacing the same pilot or titan models will conflict with it.
+1. Music doesn't get muffled by walls, and the dancing model doesn't change the server's hitbox. the DLL depends on a supported engine build. another mod replacing the same pilot or titan models will conflict with it.
+2. Since audio is played through Media Foundation, emotes may be silent on Windows "N" Edition and the plugin will hang during initialization on linux. The simple fix for that is to use ffmpeg to convert all .m4a files to .wav. You do not need to delete the .m4a files. Keep in mind this will inflate the ceaikaemotes folder from ~20MB to ~120MB.
+
 
 ## more info
 
